@@ -1,18 +1,13 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive } from 'vue'
+
+const colorMode = useColorMode()
+colorMode.preference = 'light'
 
 const appConfig = useAppConfig()
 appConfig.ui.primary = 'yellow'
 appConfig.ui.gray = 'neutral'
 
-const trackingNumber = ref('')
-
-function trackPackage() {
-  if (!trackingNumber.value) return
-  alert(`Tražim paket: ${trackingNumber.value}...`)
-}
-
-// Opcije za vrstu stambenog objekta
 const objectOptions = [
   { label: 'Kuća', value: 'kuca' },
   { label: 'Zgrada', value: 'zgrada' }
@@ -23,30 +18,25 @@ const contactState = reactive({
   phone: '',
   email: '',
   orderPdf: null as File | null,
-  isLocker: false, // Ovo će se automatski ili ručno aktivirati (ovisno o backend analizi PDF-a), za sada ostavljamo kao checkbox/toggle u formi radi UX-a ako sustav ne očita odmah
+  isLocker: false,
   lockerPin: '',
-  street: '', // Ulica i kućni broj
+  street: '',
   city: '',
   zip: '',
-  deliveryTerm: '', // Željeni termin dostave
+  deliveryTerm: '',
   objectType: 'kuca',
-  floor: '', // Kat zgrade
-  notes: '' // Napomena dostave
+  floor: '',
+  notes: ''
 })
 
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files && input.files.length > 0) {
     contactState.orderPdf = input.files[0]
-
-    // OVDJE u budućnosti možeš okinuti backend API koji čita PDF
-    // i ako u tekstu pronađe riječ "paketomat" ili "BoxNow", automatski prebaci:
-    // contactState.isLocker = true
   }
 }
 
 function onContactSubmit() {
-  // Osnovna provjera
   if (!contactState.name || !contactState.phone || !contactState.email || !contactState.street || !contactState.city || !contactState.zip) {
     alert('Molimo ispunite sva obavezna polja.')
     return
@@ -59,7 +49,7 @@ function onContactSubmit() {
 
   alert(`Hvala vam, ${contactState.name}! Potvrda narudžbe (${contactState.orderPdf.name}) je zaprimljena. Naš sustav čita podatke o proizvodima i načinu isporuke te ćemo vas ubrzo kontaktirati!`)
 
-  // Reset polja nakon slanja
+  // Reset
   contactState.name = ''
   contactState.phone = ''
   contactState.email = ''
@@ -73,6 +63,79 @@ function onContactSubmit() {
   contactState.objectType = 'kuca'
   contactState.floor = ''
   contactState.notes = ''
+}
+
+const volumeFile = ref<File | null>(null)
+const isCalculating = ref(false)
+const volumeResult = ref<{ status: 'success' | 'warning' | 'error', title: string, message: string } | null>(null)
+
+function onVolumeFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files.length > 0) {
+    volumeFile.value = input.files[0]
+    volumeResult.value = null
+  }
+}
+
+async function calculateVolume() {
+  if (!volumeFile.value) return
+
+  isCalculating.value = true
+  volumeResult.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('orderPdf', volumeFile.value)
+
+    // Šaljemo datoteku na naš novi brzi backend
+    const response = await $fetch('/api/volume', {
+      method: 'POST',
+      body: formData
+    })
+
+    if (response && response.success) {
+      const { articlesFound, requiresVan, foundBigItems } = response.data
+
+      // Ispis u konzolu za tvoje potrebe debuggiranja
+      console.log('--- REZULTAT ANALIZE PDF-a ---', response.data)
+
+      if (requiresVan) {
+        // Formiramo poruku ovisno o tome jesu li pronađeni veliki komadi ili je samo velika količina
+        let reasonText = `Sustav je detektirao ${articlesFound} artikala. Zbog velike količine stvari, za dostavu će vam vjerojatno trebati kombi.`
+
+        if (foundBigItems && foundBigItems.length > 0) {
+          // Ako smo našli velike stvari, spajamo ih u tekst (npr. "PAX, MALM")
+          const bigItemsText = foundBigItems.join(', ')
+          reasonText = `Pronašli smo ${articlesFound} artikala, uključujući masivne komade namještaja (${bigItemsText}). Za ovu narudžbu će vam sigurno trebati kombi.`
+        }
+
+        volumeResult.value = {
+          status: 'warning',
+          title: 'Ovo bi moglo biti preveliko.',
+          message: reasonText
+        }
+      } else {
+        volumeResult.value = {
+          status: 'success',
+          title: 'Odlične vijesti! Stane u auto.',
+          message: `Sustav je detektirao ${articlesFound} artikala i nismo pronašli tipične masivne komade namještaja. Proizvodi bi trebali stati u osobni automobil s preklopljenim sjedalima.`
+        }
+      }
+    } else {
+      throw new Error(response?.error || 'Nepoznata pogreška na serveru.')
+    }
+
+  } catch (error: any) {
+    console.error('Greška na klijentu:', error)
+
+    volumeResult.value = {
+      status: 'error',
+      title: 'Greška prilikom obrade',
+      message: error.data?.error || error.message || 'Došlo je do greške prilikom čitanja računa. Molimo pokušajte ponovno.'
+    }
+  } finally {
+    isCalculating.value = false
+  }
 }
 </script>
 
@@ -93,19 +156,94 @@ function onContactSubmit() {
 
     <main class="flex-grow">
 
-      <section class="relative py-20 lg:py-32 overflow-hidden bg-gray-50">
+      <section class="relative pt-12 pb-20 lg:pt-20 lg:pb-32 overflow-hidden bg-gray-50">
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-[600px] h-[600px] bg-yellow-400/20 rounded-full blur-3xl pointer-events-none"></div>
+
         <UContainer>
-          <div class="grid items-center">
-            <div>
-              <h1 class="text-5xl lg:text-7xl font-extrabold tracking-tight leading-tight">
+          <div class="grid lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+
+            <div class="lg:col-span-6 pt-4">
+              <h1 class="text-5xl lg:text-7xl font-extrabold tracking-tight leading-tight text-gray-900">
                 Pametnija dostava.<br/>
                 Ne isplati se ako nije <span class="text-yellow-500">usput.</span>
               </h1>
 
-              <p class="text-lg text-gray-600 max-w-xl mt-8">
-                Dostavljamo vaše <strong style="color: #0057AD;">IKEA</strong> pakete na relaciji Zagreb &leftrightarrow; Varaždin.
-                Zašto plaćati punu cijenu logistike? Naručite svoj paket, a mi vam ga donosimo jer ionako putujemo u tom smjeru.
+              <p class="text-lg text-gray-600 mt-8 leading-relaxed pr-4">
+                Dostavljamo vaše <strong class="text-[#0057AD]">IKEA</strong> pakete iz Zagreba direktno na vaša vrata.
+                Zašto plaćati punu cijenu službene logistike? Naručite svoj paket, a mi vam ga donosimo brzo i sigurno jer ionako putujemo u tom smjeru.
               </p>
+            </div>
+
+            <div class="lg:col-span-6 relative z-10">
+              <UCard class="shadow-2xl ring-1 ring-gray-200/50 rounded-2xl overflow-hidden bg-white/95 backdrop-blur-md">
+                <div class="p-4 sm:p-6">
+                  <div class="mb-6">
+                    <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center mb-4 text-yellow-600">
+                      <UIcon name="i-lucide-calculator" class="w-6 h-6" />
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900">Stane li narudžba u auto?</h2>
+                    <p class="text-sm text-gray-500 mt-2 leading-relaxed">
+                      Niste sigurni hoće li vaša narudžba stati u vaš osobni automobil?
+                      Učitajte račun ili potvrdu narudžbe, a naš sustav će automatski provjeriti dimenzije proizvoda.
+                    </p>
+                  </div>
+
+                  <div class="space-y-6">
+                    <UFormGroup label="IKEA račun / Potvrda narudžbe">
+                      <UInput
+                        type="file"
+                        accept="application/pdf, image/*"
+                        icon="i-lucide-upload-cloud"
+                        size="lg"
+                        @change="onVolumeFileChange"
+                        class="mb-4"
+                      />
+                    </UFormGroup>
+
+                    <UButton
+                      block
+                      size="xl"
+                      color="primary"
+                      style="background-color: #facc15; color: #000; font-weight: bold;"
+                      class="hover:bg-yellow-500 transition-colors shadow-md"
+                      :loading="isCalculating"
+                      :disabled="!volumeFile"
+                      @click="calculateVolume"
+                    >
+                      {{ isCalculating ? 'Analiziram dimenzije...' : 'Provjeri stane li u auto' }}
+                    </UButton>
+
+                    <div v-if="volumeResult"
+                         class="p-4 rounded-xl border flex items-start gap-3 transition-all"
+                         :class="{
+                           'bg-green-50 border-green-200 text-green-800': volumeResult.status === 'success',
+                           'bg-yellow-50 border-yellow-200 text-yellow-900': volumeResult.status === 'warning',
+                           'bg-red-50 border-red-200 text-red-800': volumeResult.status === 'error'
+                         }">
+
+                      <UIcon v-if="volumeResult.status === 'success'" name="i-lucide-check-circle" class="w-6 h-6 shrink-0 mt-0.5 text-green-600" />
+                      <UIcon v-else-if="volumeResult.status === 'warning'" name="i-lucide-alert-triangle" class="w-6 h-6 shrink-0 mt-0.5 text-yellow-600" />
+                      <UIcon v-else name="i-lucide-x-circle" class="w-6 h-6 shrink-0 mt-0.5 text-red-600" />
+
+                      <div>
+                        <h4 class="font-bold mb-1">{{ volumeResult.title }}</h4>
+                        <p class="text-sm leading-relaxed opacity-90">{{ volumeResult.message }}</p>
+
+                        <UButton
+                          v-if="volumeResult.status === 'warning'"
+                          color="gray"
+                          variant="solid"
+                          size="sm"
+                          class="mt-3 font-semibold"
+                          to="#contact"
+                        >
+                          Zatraži uslugu prijevoza kombijem
+                        </UButton>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </UCard>
             </div>
           </div>
         </UContainer>
