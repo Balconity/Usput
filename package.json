@@ -11,12 +11,17 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1057.0",
+    "@aws-sdk/lib-dynamodb": "^3.1057.0",
     "@iconify-json/lucide": "^1.2.106",
     "@iconify-json/simple-icons": "^1.2.81",
     "@nuxt/ui": "^4.7.1",
+    "aws-amplify": "^6.17.0",
     "cheerio": "^1.2.0",
     "got-scraping": "^4.2.1",
     "nuxt": "^4.4.5",
+    "nuxt-security": "^2.6.0",
+    "puppeteer": "^25.1.0",
     "tailwindcss": "^4.3.0",
     "unpdf": "^1.6.2"
   },

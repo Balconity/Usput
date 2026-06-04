@@ -1,11 +1,41 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
-    '@nuxt/ui'
+    '@nuxt/ui',
+    'nuxt-security'
   ],
 
   colorMode: {
     preference: 'light'
+  },
+
+  runtimeConfig: {
+    apiUrl: process.env.API_URL,
+
+    public: {
+
+    }
+  },
+
+  security: {
+    rateLimiter: {
+      tokensPerInterval: 5,
+      interval: 60000,
+      fireImmediately: true,
+      throwError: true
+    },
+    headers: false,
+  },
+
+  routeRules: {
+    '/api/**': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 5,
+          interval: 60000
+        }
+      }
+    }
   },
 
   devtools: {
