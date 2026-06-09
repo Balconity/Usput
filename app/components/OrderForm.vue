@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 
 const objectOptions = [
   { label: 'Kuća', value: 'kuca' },
-  { label: 'Zgrada', value: 'zgrada' }
+  { label: 'Zgrada / Stan', value: 'zgrada' }
 ]
 
 const contactState = reactive({
@@ -17,205 +17,291 @@ const contactState = reactive({
   lockerPin: '',
   street: '',
   city: '',
-  zip: '',
+  zip: '42000', // Default Varaždin
   deliveryTerm: '',
   objectType: 'kuca',
   floor: '',
   notes: '',
-  wantsAssembly: false,
-  website: '' // OVO JE NAŠ HONEYPOT ZA BOTOVE
+  website: '' // HONEYPOT ZA BOTOVE
 })
+
+// UI State za poruke
+const formError = ref('')
+const formSuccess = ref('')
+const isSubmitting = ref(false)
 
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files && input.files.length > 0) {
     contactState.orderPdf = input.files[0]
+    formError.value = '' // Očisti grešku ako je postojala
   }
 }
 
-function onContactSubmit() {
+async function onContactSubmit() {
+  formError.value = ''
+  formSuccess.value = ''
+
   // HONEYPOT PROVJERA: Ako je skriveno polje ispunjeno, to je sigurno bot
   if (contactState.website !== '') {
-    console.warn('Bot detektiran u formi za narudžbu! Odbacujem zahtjev.')
+    console.warn('Bot detektiran!')
     return
   }
 
-  // Provjera obaveznih polja
+  // 1. Provjera obaveznih polja
   if (!contactState.name || !contactState.phone || !contactState.email || !contactState.ikeaOrderNumber || !contactState.ikeaPickupSlot || !contactState.street || !contactState.city || !contactState.zip) {
-    alert('Molimo ispunite sva obavezna polja.')
+    formError.value = 'Molimo ispunite sva polja označena zvjezdicom (*).'
     return
   }
 
+  // 2. Regex provjera za hrvatski broj mobitela
+  const phoneRegex = /^(?:\+385|0)[1-9]\d{1,2}\s?\d{3}\s?\d{3,4}$/
+  if (!phoneRegex.test(contactState.phone.trim())) {
+    formError.value = 'Molimo unesite ispravan format broja mobitela (npr. 091 234 5678).'
+    return
+  }
+
+  // 3. Provjera PDF-a
   if (!contactState.orderPdf) {
-    alert('Molimo učitajte PDF potvrde narudžbe.')
+    formError.value = 'Molimo priložite PDF potvrdu narudžbe koju vam je poslala IKEA.'
     return
   }
 
-  const assemblyMsg = contactState.wantsAssembly ? ' Zabilježili smo i vaš zahtjev za montažom namještaja te će vam se naš partner majstor ubrzo javiti.' : ''
-  alert(`Hvala vam, ${contactState.name}! Vaša narudžba #${contactState.ikeaOrderNumber} je zaprimljena.${assemblyMsg} Naš sustav obrađuje podatke i kontaktirat ćemo vas ubrzo!`)
+  // 4. Provjera PIN-a ako je odabran paketomat
+  if (contactState.isLocker && !contactState.lockerPin) {
+    formError.value = 'Odabrali ste preuzimanje iz paketomata. Molimo unesite PIN za otvaranje.'
+    return
+  }
 
-  // Reset forme nakon uspješnog slanja
-  contactState.name = ''
-  contactState.phone = ''
-  contactState.email = ''
-  contactState.ikeaOrderNumber = ''
-  contactState.ikeaPickupSlot = ''
-  contactState.orderPdf = null
-  contactState.isLocker = false
-  contactState.lockerPin = ''
-  contactState.street = ''
-  contactState.city = ''
-  contactState.zip = ''
-  contactState.deliveryTerm = ''
-  contactState.objectType = 'kuca'
-  contactState.floor = ''
-  contactState.notes = ''
-  contactState.wantsAssembly = false
-  contactState.website = ''
+  isSubmitting.value = true
+
+  // Simulacija API poziva (Ovdje kasnije ide tvoj pravi backend poziv)
+  setTimeout(() => {
+    isSubmitting.value = false
+    formSuccess.value = `Hvala Vam, ${contactState.name.split(' ')[0]}! Vaš zahtjev za narudžbu #${contactState.ikeaOrderNumber} je uspješno zaprimljen. Uskoro ćemo vas kontaktirati.`
+
+    // Resetiranje forme
+    Object.assign(contactState, {
+      name: '', phone: '', email: '', ikeaOrderNumber: '', ikeaPickupSlot: '',
+      orderPdf: null, isLocker: false, lockerPin: '', street: '', city: '',
+      zip: '42000', deliveryTerm: '', objectType: 'kuca', floor: '', notes: '', website: ''
+    })
+
+    // Opcionalno: Scrollaj na vrh forme da korisnik vidi poruku uspjeha
+    window.scrollTo({ top: document.getElementById('contact-form')?.offsetTop, behavior: 'smooth' })
+  }, 1500)
 }
 </script>
 
 <template>
-  <UCard class="shadow-lg relative overflow-hidden">
-    <UForm :state="contactState" @submit="onContactSubmit" class="space-y-8 p-2">
+  <div id="contact-form" class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
 
-      <div class="absolute -left-[9999px] top-auto w-1 h-1 overflow-hidden" aria-hidden="true">
-        <label for="website">Vaša web stranica (ostavite prazno)</label>
-        <input id="website" v-model="contactState.website" type="text" name="website" tabindex="-1" autocomplete="off" />
-      </div>
+    <!-- Zaglavlje forme -->
+    <div class="bg-gray-900 px-6 py-8 text-center sm:text-left sm:px-10">
+      <h2 class="text-2xl font-black text-white">Podaci o dostavi</h2>
+      <p class="text-gray-400 text-sm mt-2">Ispunite formu ispod i prepustite nam logistiku. Brzo, sigurno i usput.</p>
+    </div>
 
-      <div>
-        <h3 class="text-lg font-bold mb-4 text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
-          <span class="flex items-center justify-center bg-yellow-400 text-black text-xs font-black rounded-full w-5 h-5">1</span>
-          Naručitelj i podaci za preuzimanje
-        </h3>
+    <div class="p-6 sm:p-10">
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <UFormGroup label="Ime i prezime naručitelja" name="name" required class="sm:col-span-2">
-            <UInput v-model="contactState.name" icon="i-lucide-user" placeholder="Vaše ime, kako je navedeno na IKEA računu" size="lg" />
-          </UFormGroup>
+      <!-- Obavijesti (Uspjeh / Greška) -->
+      <UAlert
+        v-if="formError"
+        icon="i-lucide-alert-circle"
+        color="red"
+        variant="soft"
+        :title="formError"
+        class="mb-8 font-medium"
+      />
 
-          <UFormGroup label="Broj telefona" name="phone" required>
-            <UInput v-model="contactState.phone" type="tel" icon="i-lucide-phone" placeholder="09x xxx xxxx" size="lg" />
-          </UFormGroup>
+      <UAlert
+        v-if="formSuccess"
+        icon="i-lucide-check-circle-2"
+        color="green"
+        variant="soft"
+        title="Zahtjev poslan!"
+        :description="formSuccess"
+        class="mb-8 font-medium"
+      />
 
-          <UFormGroup label="E-mail adresa" name="email" required>
-            <UInput v-model="contactState.email" type="email" icon="i-lucide-mail" placeholder="ivan@primjer.com" size="lg" />
-          </UFormGroup>
+      <UForm :state="contactState" @submit="onContactSubmit" class="space-y-12">
 
-          <div class="sm:col-span-2 grid sm:grid-cols-2 gap-5 bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
-            <UFormGroup label="Broj IKEA narudžbe" name="ikeaOrderNumber" required help="Pronađite 9-znamenkasti broj na računu">
+        <!-- Honeypot -->
+        <div class="absolute -left-[9999px] top-auto w-1 h-1 overflow-hidden" aria-hidden="true">
+          <label for="website">Vaša web stranica (ostavite prazno)</label>
+          <input id="website" v-model="contactState.website" type="text" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <!-- 1. KORAK: Osobni podaci -->
+        <section>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-full bg-yellow-400 text-black flex items-center justify-center font-black shadow-sm">1</div>
+            <h3 class="text-lg font-bold text-gray-900 uppercase tracking-wider">Vaši kontakt podaci</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+            <UFormGroup label="Ime i prezime" name="name" required class="md:col-span-2">
+              <UInput v-model="contactState.name" icon="i-lucide-user" placeholder="Kako je navedeno na IKEA računu" size="lg" :ui="{ icon: { trailing: { pointer: '' } } }" />
+            </UFormGroup>
+
+            <UFormGroup label="Broj mobitela" name="phone" required>
+              <UInput v-model="contactState.phone" type="tel" icon="i-lucide-smartphone" placeholder="091 234 5678" size="lg" />
+            </UFormGroup>
+
+            <UFormGroup label="E-mail adresa" name="email" required>
+              <UInput v-model="contactState.email" type="email" icon="i-lucide-mail" placeholder="ivan@primjer.com" size="lg" />
+            </UFormGroup>
+          </div>
+        </section>
+
+        <!-- 2. KORAK: IKEA Podaci (Istaknuto plavom bojom) -->
+        <section>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-full bg-yellow-400 text-black flex items-center justify-center font-black shadow-sm">2</div>
+            <h3 class="text-lg font-bold text-gray-900 uppercase tracking-wider">Podaci iz robne kuće</h3>
+          </div>
+
+          <div class="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-6 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+
+            <UFormGroup label="Broj IKEA narudžbe" name="ikeaOrderNumber" required help="9-znamenkasti broj s potvrde">
               <UInput v-model="contactState.ikeaOrderNumber" icon="i-lucide-hash" placeholder="Npr. 123456789" size="lg" />
             </UFormGroup>
 
-            <UFormGroup label="IKEA termin prikupa" name="ikeaPickupSlot" required help="Kada je roba spremna u robnoj kući?">
+            <UFormGroup label="Termin prikupa" name="ikeaPickupSlot" required help="Kada je roba spremna u robnoj kući?">
               <UInput v-model="contactState.ikeaPickupSlot" icon="i-lucide-calendar-clock" placeholder="Npr. Utorak, 14:00 - 16:00" size="lg" />
             </UFormGroup>
-          </div>
-
-          <UFormGroup
-            label="PDF Potvrde narudžbe"
-            name="orderPdf"
-            required
-            class="sm:col-span-2"
-            help="Učitajte službeni PDF koji vam je IKEA poslala na email kao dokaz o kupnji."
-          >
-            <UInput
-              type="file"
-              accept="application/pdf"
-              icon="i-lucide-file-text"
-              size="lg"
-              @change="handleFileChange"
-            />
-          </UFormGroup>
-
-          <div class="sm:col-span-2 bg-neutral-100 p-4 rounded-xl border border-gray-200 space-y-4">
-            <UCheckbox
-              v-model="contactState.isLocker"
-              label="Je li odabrana isporuka u IKEA paketomat (Locker)?"
-              name="isLocker"
-            />
 
             <UFormGroup
-              v-if="contactState.isLocker"
-              label="Unesite PIN za otvaranje paketomata"
-              name="lockerPin"
+              label="PDF Potvrda narudžbe"
+              name="orderPdf"
               required
+              class="md:col-span-2 mt-2"
+              help="Učitajte dokument koji vam je IKEA poslala na email. Služi nam kao dokaz za preuzimanje."
             >
-              <UInput v-model="contactState.lockerPin" icon="i-lucide-key" placeholder="123456" size="lg" class="max-w-xs" />
+              <div class="flex items-center justify-center w-full">
+                <label for="pdf-upload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-blue-200 border-dashed rounded-xl cursor-pointer bg-white hover:bg-blue-50 transition-colors">
+                  <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                    <UIcon name="i-lucide-upload-cloud" class="w-8 h-8 text-blue-500 mb-2" />
+                    <p class="mb-1 text-sm text-gray-700 font-bold">
+                      <span v-if="contactState.orderPdf" class="text-blue-600">{{ contactState.orderPdf.name }}</span>
+                      <span v-else>Kliknite za učitavanje PDF dokumenta</span>
+                    </p>
+                    <p v-if="!contactState.orderPdf" class="text-xs text-gray-500">Maksimalna veličina: 5MB</p>
+                  </div>
+                  <input id="pdf-upload" type="file" accept="application/pdf" class="hidden" @change="handleFileChange" />
+                </label>
+              </div>
+            </UFormGroup>
+
+            <div class="md:col-span-2 pt-4 mt-2 border-t border-blue-100">
+              <UCheckbox
+                v-model="contactState.isLocker"
+                name="isLocker"
+                color="blue"
+                class="font-bold text-gray-900"
+              >
+                <template #label>
+                  <span>Moja narudžba se nalazi u <strong class="text-blue-700">IKEA Paketomatu</strong> (Locker)</span>
+                </template>
+              </UCheckbox>
+
+              <div v-if="contactState.isLocker" class="mt-4 animate-pulse-once">
+                <UFormGroup label="PIN za otvaranje paketomata" name="lockerPin" required>
+                  <UInput v-model="contactState.lockerPin" icon="i-lucide-key" placeholder="Upišite kod iz SMS-a" size="lg" class="max-w-xs" />
+                </UFormGroup>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. KORAK: Adresa -->
+        <section>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-full bg-yellow-400 text-black flex items-center justify-center font-black shadow-sm">3</div>
+            <h3 class="text-lg font-bold text-gray-900 uppercase tracking-wider">Adresa za istovar</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+            <UFormGroup label="Ulica i kućni broj" name="street" required class="md:col-span-12">
+              <UInput v-model="contactState.street" icon="i-lucide-map-pin" placeholder="Zagrebačka ulica 1" size="lg" />
+            </UFormGroup>
+
+            <UFormGroup label="Grad / Naselje" name="city" required class="md:col-span-8">
+              <UInput v-model="contactState.city" placeholder="Varaždin" size="lg" />
+            </UFormGroup>
+
+            <UFormGroup label="Poštanski broj" name="zip" required class="md:col-span-4">
+              <UInput v-model="contactState.zip" placeholder="42000" size="lg" />
+            </UFormGroup>
+
+            <UFormGroup label="Vrsta objekta" name="objectType" class="md:col-span-6">
+              <select
+                v-model="contactState.objectType"
+                class="block w-full rounded-lg border-0 py-2.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-yellow-500 text-sm bg-white shadow-sm cursor-pointer outline-none"
+              >
+                <option v-for="opt in objectOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </UFormGroup>
+
+            <UFormGroup
+              label="Kat"
+              name="floor"
+              class="md:col-span-6"
+              :disabled="contactState.objectType === 'kuca'"
+            >
+              <UInput v-model="contactState.floor" :placeholder="contactState.objectType === 'kuca' ? 'Nije primjenjivo' : 'Npr. 2. kat, nema lifta'" size="lg" />
             </UFormGroup>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div>
-        <h3 class="text-lg font-bold mb-4 text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
-          <span class="flex items-center justify-center bg-yellow-400 text-black text-xs font-black rounded-full w-5 h-5">2</span>
-          Adresa dostave
-        </h3>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <UFormGroup label="Ulica i kućni broj" name="street" required class="sm:col-span-3">
-            <UInput v-model="contactState.street" icon="i-lucide-map-pin" placeholder="Zagrebačka ulica 1" size="lg" />
-          </UFormGroup>
-
-          <UFormGroup label="Grad / Naselje" name="city" required class="sm:col-span-2">
-            <UInput v-model="contactState.city" placeholder="Varaždin" size="lg" />
-          </UFormGroup>
-
-          <UFormGroup label="Poštanski broj (ZIP)" name="zip" required>
-            <UInput v-model="contactState.zip" placeholder="42000" size="lg" />
-          </UFormGroup>
-
-          <UFormGroup label="Vrsta objekta" name="objectType">
-            <USelect v-model="contactState.objectType" :options="objectOptions" size="lg" />
-          </UFormGroup>
-
-          <UFormGroup
-            label="Kat zgrade"
-            name="floor"
-            :disabled="contactState.objectType === 'kuca'"
-            :help="contactState.objectType === 'kuca' ? 'Nije primjenjivo za kuću' : 'Npr. 2. kat / potkrovlje'"
-          >
-            <UInput v-model="contactState.floor" placeholder="npr. 3. kat" size="lg" />
-          </UFormGroup>
-
-          <UFormGroup label="Vaš željeni termin dostave na adresu" name="deliveryTerm" class="sm:col-span-1" help="(Ovisno o ruti vozača)">
-            <UInput v-model="contactState.deliveryTerm" placeholder="npr. Iza 17h" size="lg" icon="i-lucide-clock" />
-          </UFormGroup>
-        </div>
-      </div>
-
-      <div>
-        <h3 class="text-lg font-bold mb-4 text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
-          <span class="flex items-center justify-center bg-yellow-400 text-black text-xs font-black rounded-full w-5 h-5">3</span>
-          Dodatne napomene i Usluge
-        </h3>
-
-        <div class="space-y-5">
-          <UFormGroup label="Napomena za dostavljača" name="notes" help="Npr. uska ulica, ne radi zvono, ostaviti kod susjeda ako me nema...">
-            <UTextarea v-model="contactState.notes" placeholder="Upišite specifične detalje vezane uz prilaz ili dostavu..." size="lg" autoresize />
-          </UFormGroup>
-
-          <div class="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-            <UCheckbox
-              v-model="contactState.wantsAssembly"
-              label="Želim informativnu ponudu za montažu namještaja"
-              help="Naš partner majstor kontaktirat će vas s cijenom na temelju vaše narudžbe."
-              name="wantsAssembly"
-              color="yellow"
-              class="font-bold text-gray-900"
-            />
+        <!-- 4. KORAK: Dodatno -->
+        <section>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-8 h-8 rounded-full bg-yellow-400 text-black flex items-center justify-center font-black shadow-sm">4</div>
+            <h3 class="text-lg font-bold text-gray-900 uppercase tracking-wider">Napomene</h3>
           </div>
+
+          <div class="grid grid-cols-1 gap-6 bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+            <UFormGroup label="Željeni okvirni termin dostave na adresu" name="deliveryTerm" help="Pokušat ćemo se prilagoditi, ali točno vrijeme ovisi o ruti.">
+              <UInput v-model="contactState.deliveryTerm" placeholder="Npr. Iza 16:30h" size="lg" icon="i-lucide-clock" />
+            </UFormGroup>
+
+            <UFormGroup label="Poruka za vozača" name="notes" help="Specifični detalji vezani uz prilaz kući, dvorište, interfon...">
+              <UTextarea v-model="contactState.notes" placeholder="Npr. Zvono ne radi, nazovite kad ste ispred zgrade..." :rows="3" size="lg" autoresize />
+            </UFormGroup>
+          </div>
+        </section>
+
+        <!-- SUBMIT -->
+        <div class="pt-4 border-t border-gray-200 mt-8">
+          <UButton
+            type="submit"
+            size="xl"
+            block
+            icon="i-lucide-send"
+            :loading="isSubmitting"
+            style="background-color: #facc15; color: #000; font-weight: 900; font-size: 1.1rem; padding: 1rem;"
+            class="hover:bg-yellow-500 transition-all shadow-xl hover:shadow-yellow-400/30 transform hover:-translate-y-0.5"
+          >
+            {{ isSubmitting ? 'Slanje zahtjeva u tijeku...' : 'Pošalji zahtjev za dostavu' }}
+          </UButton>
+          <p class="text-center text-xs text-gray-500 mt-4">
+            Klikom na gumb potvrđujete da se slažete s našim <NuxtLink to="/terms-of-service" class="underline hover:text-gray-900">Uvjetima korištenja</NuxtLink>.
+          </p>
         </div>
-      </div>
 
-      <div class="pt-4">
-        <UButton type="submit" size="xl" block icon="i-lucide-send" style="background-color: #facc15; color: #000; font-weight: bold;" class="hover:bg-yellow-500 transition-colors shadow-lg">
-          Pošaljite zahtjev za dostavu
-        </UButton>
-      </div>
-
-    </UForm>
-  </UCard>
+      </UForm>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.animate-pulse-once {
+  animation: pulse 2s ease-in-out 1;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(0.98); }
+}
+</style>

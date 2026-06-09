@@ -25,6 +25,7 @@ appConfig.ui.gray = 'neutral'
     </header>
 
     <main class="flex-grow">
+      <!-- HERO SEKCIJA S KALKULATOROM -->
       <section class="relative pt-12 pb-20 lg:pt-20 lg:pb-32 overflow-hidden bg-gray-50">
         <div class="absolute top-0 right-0 -mr-20 -mt-20 w-[600px] h-[600px] bg-yellow-400/20 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -50,7 +51,77 @@ appConfig.ui.gray = 'neutral'
         </UContainer>
       </section>
 
-      <section id="services" class="py-20 bg-white border-y border-gray-200">
+      <!-- NOVA SEKCIJA: KAKO FUNKCIONIRA (UPUTE) -->
+      <section id="how-it-works" class="py-20 bg-white border-y border-gray-200">
+        <UContainer>
+          <div class="text-center max-w-3xl mx-auto mb-16">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-600 font-bold text-sm mb-4 border border-blue-100">
+              <UIcon name="i-lucide-list-checks" class="w-4 h-4" />
+              <span>Jednostavan proces</span>
+            </div>
+            <h2 class="text-3xl lg:text-4xl font-extrabold mb-4 text-gray-900">Od webshopa do vaših vrata</h2>
+            <p class="text-lg text-gray-600">
+              Ne znate stane li narudžba u vaš automobil? Slijedite ova 4 brza koraka i odmah saznajte.
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
+            <!-- Linija koja spaja korake (vidljiva samo na velikim ekranima) -->
+            <div class="hidden lg:block absolute top-12 left-[10%] right-[10%] h-0.5 bg-gradient-to-r from-gray-200 via-yellow-400 to-gray-200 z-0"></div>
+
+            <!-- Korak 1 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+              <div class="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-gray-100 mb-6 group-hover:-translate-y-2 transition-transform duration-300">
+                <UIcon name="i-lucide-heart" class="w-10 h-10 text-gray-400 group-hover:text-red-500 transition-colors" />
+              </div>
+              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-20 border-4 border-white shadow-sm">1</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Spremite proizvode</h3>
+              <p class="text-sm text-gray-600 leading-relaxed">
+                Pronađite željene proizvode u IKEA aplikaciji ili na webu i kliknite na ikonu srca kako biste ih dodali na svoj <strong>Popis za kupovinu</strong>.
+              </p>
+            </div>
+
+            <!-- Korak 2 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+              <div class="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-gray-100 mb-6 group-hover:-translate-y-2 transition-transform duration-300">
+                <UIcon name="i-lucide-share-2" class="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
+              </div>
+              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-20 border-4 border-white shadow-sm">2</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Kopirajte link</h3>
+              <p class="text-sm text-gray-600 leading-relaxed">
+                Otvorite svoj popis, pronađite opciju <strong>Podijeli</strong> (Share) i odaberite "Kopiraj poveznicu". To je sve što nam treba!
+              </p>
+            </div>
+
+            <!-- Korak 3 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+              <div class="w-24 h-24 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-gray-100 mb-6 group-hover:-translate-y-2 transition-transform duration-300">
+                <UIcon name="i-lucide-calculator" class="w-10 h-10 text-gray-400 group-hover:text-yellow-500 transition-colors" />
+              </div>
+              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-20 border-4 border-white shadow-sm">3</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Provjerite volumen</h3>
+              <p class="text-sm text-gray-600 leading-relaxed">
+                Zalijepite link u naš kalkulator iznad. Sustav će u sekundi izračunati stane li vaša narudžba u osobni automobil.
+              </p>
+            </div>
+
+            <!-- Korak 4 -->
+            <div class="relative z-10 flex flex-col items-center text-center group">
+              <div class="w-24 h-24 bg-yellow-400 rounded-2xl flex items-center justify-center shadow-lg border border-yellow-500 mb-6 group-hover:-translate-y-2 transition-transform duration-300">
+                <UIcon name="i-lucide-truck" class="w-10 h-10 text-gray-900" />
+              </div>
+              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-20 border-4 border-white shadow-sm">4</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Naručite Usput</h3>
+              <p class="text-sm text-gray-600 leading-relaxed">
+                Ako vam treba kombi, dovršite narudžbu na IKEA webu (Click&Collect), pošaljite nam potvrdu i mi preuzimamo dostavu.
+              </p>
+            </div>
+          </div>
+        </UContainer>
+      </section>
+
+      <!-- SEKCIJA: LOGISTIKA -->
+      <section id="services" class="py-20 bg-gray-50 border-y border-gray-200">
         <UContainer>
           <div class="text-center max-w-2xl mx-auto mb-16">
             <h2 class="text-3xl font-bold mb-4">Logistika prilagođena vama</h2>
@@ -78,63 +149,8 @@ appConfig.ui.gray = 'neutral'
         </UContainer>
       </section>
 
-      <section id="assembly" class="py-20 bg-gray-900 text-white relative overflow-hidden">
-        <div class="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-400 via-transparent to-transparent"></div>
-        <UContainer class="relative z-10">
-          <div class="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/10 text-yellow-400 font-bold text-sm mb-6 border border-yellow-400/20">
-                <UIcon name="i-lucide-hammer" class="w-4 h-4" />
-                <span>Dodatna usluga</span>
-              </div>
-              <h2 class="text-4xl font-extrabold mb-6 leading-tight">Nemate vremena ili alata za sastavljanje?</h2>
-              <p class="text-lg text-gray-400 mb-8 leading-relaxed">
-                Riješite se muke s uputama i vijcima. Povezujemo vas s provjerenim lokalnim majstorima na relaciji Zagreb - Varaždin koji će vaš novi namještaj sastaviti stručno i brzo, odmah nakon dostave.
-              </p>
-
-              <ul class="space-y-4 mb-8">
-                <li class="flex items-center gap-3 text-gray-300 font-medium">
-                  <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shrink-0 border border-gray-700">
-                    <UIcon name="i-lucide-check" class="text-yellow-400 w-4 h-4" />
-                  </div>
-                  Provjereni i iskusni lokalni majstori
-                </li>
-                <li class="flex items-center gap-3 text-gray-300 font-medium">
-                  <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shrink-0 border border-gray-700">
-                    <UIcon name="i-lucide-check" class="text-yellow-400 w-4 h-4" />
-                  </div>
-                  Dolazak u terminu koji vama odgovara
-                </li>
-                <li class="flex items-center gap-3 text-gray-300 font-medium">
-                  <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shrink-0 border border-gray-700">
-                    <UIcon name="i-lucide-check" class="text-yellow-400 w-4 h-4" />
-                  </div>
-                  Usluga se plaća direktno majstoru po obavljenom poslu
-                </li>
-              </ul>
-
-              <UButton size="xl" color="warning" class="font-bold text-black" icon="i-lucide-arrow-down" to="#contact">
-                Zatraži ponudu uz dostavu
-              </UButton>
-            </div>
-
-            <div class="relative">
-              <div class="absolute inset-0 bg-gradient-to-tr from-yellow-400/20 to-transparent rounded-3xl transform rotate-3 scale-105 blur-lg"></div>
-              <UCard class="bg-gray-800 border-gray-700 relative z-10 shadow-2xl rounded-3xl overflow-hidden">
-                <div class="p-8 text-center">
-                  <div class="w-20 h-20 mx-auto bg-gray-900 rounded-2xl flex items-center justify-center border border-gray-700 mb-6 shadow-inner">
-                    <UIcon name="i-lucide-wrench" class="w-10 h-10 text-yellow-400" />
-                  </div>
-                  <h3 class="text-2xl font-bold text-white mb-2">Ključ u ruke</h3>
-                  <p class="text-gray-400 mb-6">Samo odaberite opciju "Želim ponudu za montažu" u formi ispod, a naš partnerski majstor će vas kontaktirati s točnom procjenom cijene prema vašoj narudžbi.</p>
-                </div>
-              </UCard>
-            </div>
-          </div>
-        </UContainer>
-      </section>
-
-      <section id="contact" class="py-20 bg-gray-50 border-t border-gray-200">
+      <!-- SEKCIJA: KONTAKT / NARUDŽBA -->
+      <section id="contact" class="py-20 bg-white border-t border-gray-200">
         <UContainer class="max-w-3xl">
           <div class="text-center mb-10">
             <h2 class="text-3xl font-bold mb-4">Naruči dostavu</h2>

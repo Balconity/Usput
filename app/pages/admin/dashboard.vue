@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth'
+import { getCurrentUser } from 'aws-amplify/auth'
 
 const router = useRouter()
 const isAuthChecking = ref(true)
+
+// --- VARIJABLE FILTERA ---
 const searchFilter = ref('')
 const statusFilter = ref('SVE')
+const dateFilter = ref('SVE')
 
-// --- PODACI O SVIM DOSTAVAMA (Admin pogled - kasnije vučeš iz DynamoDB scan/query rute) ---
+// --- POSTAVKE KOMBIJA (Trajno pamćenje u LocalStorage) ---
+const vanVolumeCapacity = ref(12.0)
+const vanWeightCapacity = ref(1300)
+
+watch(vanVolumeCapacity, (newVal) => localStorage.setItem('usput_van_vol', newVal.toString()))
+watch(vanWeightCapacity, (newVal) => localStorage.setItem('usput_van_weight', newVal.toString()))
+
+// --- PODACI O SVIM DOSTAVAMA ---
 const allDeliveries = ref([
   {
     id: 'DELIVERY#1717265230',
@@ -17,7 +27,7 @@ const allDeliveries = ref([
     date: '12.06.2026.',
     city: 'Varaždin',
     address: 'Zagrebačka ulica 1',
-    status: 'U_TRANZITU',
+    status: 'ZAPRIMLJENO',
     price: 44.99,
     volume: 0.85,
     weight: 45.2,
@@ -28,14 +38,14 @@ const allDeliveries = ref([
     id: 'DELIVERY#1717350000',
     user: 'Ana Marić',
     phone: '+385 95 888 1234',
-    date: '13.06.2026.',
+    date: '12.06.2026.',
     city: 'Novi Marof',
     address: 'Varaždinska 42',
-    status: 'ČEKA PRIKUP',
+    status: 'ZAPRIMLJENO',
     price: 6.99,
-    volume: 0.12,
-    weight: 14.5,
-    itemsCount: 2,
+    volume: 8.12,
+    weight: 414.5,
+    itemsCount: 12,
     isLocker: true,
     lockerPin: '554321'
   },
@@ -43,28 +53,24 @@ const allDeliveries = ref([
     id: 'DELIVERY#1714000000',
     user: 'Marko Tomić',
     phone: '+385 99 777 9999',
-    date: '25.04.2026.',
+    date: '12.06.2026.',
     city: 'Varaždin',
     address: 'Kapucinski trg 5',
-    status: 'DOSTAVLJENO',
+    status: 'ZAPRIMLJENO',
     price: 69.98,
-    volume: 1.60,
+    volume: 3.60,
     weight: 112.0,
     itemsCount: 15,
     isLocker: false
   }
 ])
 
-// --- OPCIJE STATUSA ZA FILTRIRANJE I PROMJENU ---
-const statusOptions = [
-  { label: 'Zaprimljeno', value: 'ZAPRIMLJENO' },
-  { label: 'U obradi', value: 'U_OBRADI' },
-  { label: 'Čeka prikup (IKEA)', value: 'ČEKA PRIKUP' },
-  { label: 'U tranzitu', value: 'U_TRANZITU' },
-  { label: 'Dostavljeno', value: 'DOSTAVLJENO' }
-]
+// --- JEDINSTVENI DATUMI (Čisti stringovi za nativni select) ---
+const availableDates = computed(() => {
+  return [...new Set(allDeliveries.value.map(d => d.date))].sort()
+})
 
-// --- RAČUNANJE GLOBALNE STATISTIKE PANEL-A ---
+// --- STATISTIKA ---
 const stats = computed(() => {
   const active = allDeliveries.value.filter(d => d.status !== 'DOSTAVLJENO').length
   const revenue = allDeliveries.value.reduce((sum, d) => sum + d.price, 0)
@@ -72,7 +78,7 @@ const stats = computed(() => {
   return { active, revenue, volume: Number(volume.toFixed(2)) }
 })
 
-// --- FILTRIRANJE DOSTAVA NA EKRANU ---
+// --- FILTRIRANJE NA EKRANU ---
 const filteredDeliveries = computed(() => {
   return allDeliveries.value.filter(d => {
     const matchesSearch = d.user.toLowerCase().includes(searchFilter.value.toLowerCase()) ||
@@ -80,26 +86,75 @@ const filteredDeliveries = computed(() => {
       d.city.toLowerCase().includes(searchFilter.value.toLowerCase())
 
     const matchesStatus = statusFilter.value === 'SVE' || d.status === statusFilter.value
+    const matchesDate = dateFilter.value === 'SVE' || d.date === dateFilter.value
 
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesStatus && matchesDate
   })
 })
 
-// --- PROMJENA STATUSA DOSTAVE (Ovdje okidaš AWS API za update baze) ---
-function updateStatus(deliveryId: string, newStatus: string) {
+// --- KAPACITET KOMBIJA ---
+const activeLoad = computed(() => {
+  if (dateFilter.value === 'SVE') return null
+
+  const activeOrders = filteredDeliveries.value.filter(d => d.status !== 'DOSTAVLJENO' && d.status !== 'OTKAZANO')
+  const usedVolume = activeOrders.reduce((sum, d) => sum + d.volume, 0)
+  const usedWeight = activeOrders.reduce((sum, d) => sum + d.weight, 0)
+
+  const volPct = (usedVolume / vanVolumeCapacity.value) * 100
+  const weightPct = (usedWeight / vanWeightCapacity.value) * 100
+
+  return {
+    usedVolume,
+    usedWeight,
+    remVolume: Math.max(0, vanVolumeCapacity.value - usedVolume),
+    remWeight: Math.max(0, vanWeightCapacity.value - usedWeight),
+    volPct: volPct > 100 ? 100 : Math.round(volPct),
+    weightPct: weightPct > 100 ? 100 : Math.round(weightPct)
+  }
+})
+
+// --- FUNKCIJE ZA AKCIJE ---
+function updateStatus(deliveryId: string, event: Event) {
+  const selectElement = event.target as HTMLSelectElement
+  const newStatusValue = selectElement.value
+
   const target = allDeliveries.value.find(d => d.id === deliveryId)
   if (target) {
-    target.status = newStatus
-    // Ovdje u produkciji radiš: await $fetch(`/api/admin/update-status`, { method: 'POST', body: { id: deliveryId, status: newStatus } })
-    alert(`Status dostave ${deliveryId} uspješno promijenjen u: ${newStatus}`)
+    target.status = newStatusValue
   }
 }
 
-// --- ZAŠTITA STRANICE (Samo ulogirani admini, za MVP provjeravamo sesiju) ---
+function postponeToNextDay(deliveryId: string) {
+  const target = allDeliveries.value.find(d => d.id === deliveryId)
+  if (!target) return
+
+  const parts = target.date.split('.')
+  if (parts.length >= 3) {
+    const day = parseInt(parts[0], 10)
+    const month = parseInt(parts[1], 10) - 1
+    const year = parseInt(parts[2], 10)
+
+    const dateObj = new Date(year, month, day)
+    dateObj.setDate(dateObj.getDate() + 1)
+
+    const nextDay = String(dateObj.getDate()).padStart(2, '0')
+    const nextMonth = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const nextYear = dateObj.getFullYear()
+
+    target.date = `${nextDay}.${nextMonth}.${nextYear}.`
+    alert(`Dostava prebačena na ${target.date}`)
+  }
+}
+
 onMounted(async () => {
+  const savedVol = localStorage.getItem('usput_van_vol')
+  if (savedVol) vanVolumeCapacity.value = parseFloat(savedVol)
+
+  const savedWeight = localStorage.getItem('usput_van_weight')
+  if (savedWeight) vanWeightCapacity.value = parseInt(savedWeight)
+
   try {
     await getCurrentUser()
-    // Ovdje kasnije provjeravaš u attributes je li email tvoj admin email ili Cognito grupa "Admin"
   } catch (error) {
     console.warn('Neautoriziran pristup admin panelu, preusmjeravanje...')
     router.push('/login')
@@ -142,48 +197,102 @@ const formatPrice = (price: number) => {
           <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h1 class="text-3xl font-black text-gray-950">Upravljanje logistikom</h1>
-              <p class="text-sm text-gray-500 mt-1">Pregled i kontrola ruta, paketomata i statusa dostava u realnom vremenu.</p>
+              <p class="text-sm text-gray-500 mt-1">Pregled rute i optimizacija tereta vozila.</p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 bg-white p-3 rounded-xl border border-gray-200 shadow-sm items-center">
+              <span class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                <UIcon name="i-lucide-truck" class="w-4 h-4" /> Moje vozilo:
+              </span>
+              <div class="flex gap-2">
+                <UFormGroup label="Kapacitet (m³)">
+                  <UInput v-model.number="vanVolumeCapacity" type="number" step="0.5" class="w-24" size="sm" />
+                </UFormGroup>
+                <UFormGroup label="Nosivost (kg)">
+                  <UInput v-model.number="vanWeightCapacity" type="number" step="50" class="w-24" size="sm" />
+                </UFormGroup>
+              </div>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 w-full">
-            <UCard class="shadow-sm border border-gray-200 bg-white rounded-2xl w-full">
-              <div class="p-5 flex items-center justify-between">
-                <div>
-                  <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Aktivne dostave</span>
-                  <div class="text-3xl font-black text-gray-900 mt-1">{{ stats.active }}</div>
-                </div>
-                <div class="p-3 bg-amber-100 text-amber-700 rounded-xl"><UIcon name="i-lucide-truck" class="w-6 h-6" /></div>
+          <div v-if="activeLoad" class="grid grid-cols-1 md:grid-cols-2 gap-5 w-full bg-white p-6 rounded-2xl border-2 border-blue-200 shadow-md relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+            <div class="md:col-span-2 flex justify-between items-center">
+              <div>
+                <h3 class="text-xl font-black text-gray-900 flex items-center gap-2">
+                  <UIcon name="i-lucide-route" class="w-6 h-6 text-blue-500" />
+                  Optimizacija rute za dan: <span class="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{{ dateFilter }}</span>
+                </h3>
               </div>
-            </UCard>
+            </div>
 
-            <UCard class="shadow-sm border border-gray-200 bg-white rounded-2xl w-full">
-              <div class="p-5 flex items-center justify-between">
-                <div>
-                  <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Ukupni promet (Gross)</span>
-                  <div class="text-3xl font-black text-green-600 mt-1">{{ formatPrice(stats.revenue) }}</div>
-                </div>
-                <div class="p-3 bg-green-100 text-green-700 rounded-xl"><UIcon name="i-lucide-banknote" class="w-6 h-6" /></div>
+            <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 relative overflow-hidden">
+              <div class="flex justify-between items-end mb-3">
+                <span class="text-sm font-bold text-gray-500 uppercase tracking-wider">Popunjenost volumena</span>
+                <span class="text-3xl font-black" :class="activeLoad.volPct > 95 ? 'text-red-500' : 'text-gray-900'">
+                  {{ activeLoad.volPct }}%
+                </span>
               </div>
-            </UCard>
+              <UProgress :value="activeLoad.volPct" :color="activeLoad.volPct > 95 ? 'red' : 'yellow'" size="xl" />
+              <div class="flex justify-between mt-3 text-xs font-bold">
+                <span class="text-gray-600">Teret: {{ activeLoad.usedVolume.toFixed(2) }} / {{ vanVolumeCapacity }} m³</span>
+                <span class="text-green-600 bg-green-50 px-2 py-1 rounded">Slobodno: {{ activeLoad.remVolume.toFixed(2) }} m³</span>
+              </div>
+            </div>
 
-            <UCard class="shadow-sm border border-gray-200 bg-white rounded-2xl w-full">
-              <div class="p-5 flex items-center justify-between">
-                <div>
-                  <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block">Ukupni volumen u tranzitu</span>
-                  <div class="text-3xl font-black text-blue-600 mt-1">{{ stats.volume }} m³</div>
-                </div>
-                <div class="p-3 bg-blue-100 text-blue-700 rounded-xl"><UIcon name="i-lucide-box" class="w-6 h-6" /></div>
+            <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 relative overflow-hidden">
+              <div class="flex justify-between items-end mb-3">
+                <span class="text-sm font-bold text-gray-500 uppercase tracking-wider">Iskorištenost nosivosti</span>
+                <span class="text-3xl font-black" :class="activeLoad.weightPct > 95 ? 'text-red-500' : 'text-gray-900'">
+                  {{ activeLoad.weightPct }}%
+                </span>
               </div>
-            </UCard>
+              <UProgress :value="activeLoad.weightPct" :color="activeLoad.weightPct > 95 ? 'red' : 'blue'" size="xl" />
+              <div class="flex justify-between mt-3 text-xs font-bold">
+                <span class="text-gray-600">Masa: {{ activeLoad.usedWeight.toFixed(1) }} / {{ vanWeightCapacity }} kg</span>
+                <span class="text-green-600 bg-green-50 px-2 py-1 rounded">Slobodno: {{ activeLoad.remWeight.toFixed(1) }} kg</span>
+              </div>
+            </div>
+
+            <div v-if="activeLoad.volPct > 100 || activeLoad.weightPct > 100" class="md:col-span-2 mt-2 p-3 bg-red-50 text-red-700 text-sm font-bold rounded-lg border border-red-200 flex items-center gap-2">
+              <UIcon name="i-lucide-alert-triangle" class="w-5 h-5" />
+              UPOZORENJE: Prekoračili ste kapacitet vozila za ovaj datum! Molimo odgodite neku od narudžbi za idući dan.
+            </div>
           </div>
 
-          <div class="bg-white p-4 rounded-2xl border border-gray-200 flex flex-col sm:flex-row gap-4 items-center w-full shadow-sm">
+          <div v-else class="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-yellow-800 text-sm font-bold flex items-center gap-2 shadow-sm">
+            <UIcon name="i-lucide-calendar-clock" class="w-5 h-5 shrink-0" />
+            Za prikaz grafova popunjenosti kombija, u izborniku ispod odaberite konkretan datum planirane vožnje.
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-gray-200 flex flex-col md:flex-row gap-4 items-center w-full shadow-sm">
             <div class="flex-1 w-full">
-              <UInput v-model="searchFilter" icon="i-lucide-search" placeholder="Pretraži po imenu klijenta, ID-u ili gradu..." size="lg" class="w-full" />
+              <UInput v-model="searchFilter" icon="i-lucide-search" placeholder="Pretraži klijenta..." size="xl" class="w-full" />
             </div>
+
             <div class="w-full sm:w-64">
-              <USelect v-model="statusFilter" :options="[{ label: 'Svi statusi', value: 'SVE' }, ...statusOptions]" size="lg" class="w-full" />
+              <select
+                v-model="dateFilter"
+                class="block w-full rounded-lg border-0 py-2.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-yellow-500 text-sm bg-white shadow-sm cursor-pointer outline-none transition-all hover:ring-gray-400"
+              >
+                <option value="SVE">Svi datumi (Bez optimizacije)</option>
+                <option v-for="date in availableDates" :key="date" :value="date">{{ date }}</option>
+              </select>
+            </div>
+
+            <div class="w-full sm:w-56">
+              <select
+                v-model="statusFilter"
+                class="block w-full rounded-lg border-0 py-2.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-yellow-500 text-sm bg-white shadow-sm cursor-pointer outline-none transition-all hover:ring-gray-400"
+              >
+                <option value="SVE">Svi statusi</option>
+                <option value="ZAPRIMLJENO">Zaprimljeno (Aktivno)</option>
+                <option value="U_OBRADI">U obradi</option>
+                <option value="ČEKA PRIKUP">Čeka prikup (IKEA)</option>
+                <option value="U_TRANZITU">U tranzitu</option>
+                <option value="DOSTAVLJENO">Dostavljeno</option>
+                <option value="OTKAZANO">Otkazano</option>
+              </select>
             </div>
           </div>
 
@@ -197,14 +306,16 @@ const formatPrice = (price: number) => {
                 Nije pronađena nijedna dostava prema zadanim kriterijima.
               </div>
 
-              <div v-else v-for="del in filteredDeliveries" :key="del.id" class="p-6 hover:bg-gray-50/50 transition-colors w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+              <div v-else v-for="del in filteredDeliveries" :key="del.id" class="p-6 hover:bg-gray-50/50 transition-colors w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-center" :class="{'opacity-50 grayscale': del.status === 'DOSTAVLJENO' || del.status === 'OTKAZANO'}">
 
                 <div class="lg:col-span-2 min-w-0">
                   <span class="font-mono text-xs font-bold text-gray-400 block mb-1">ID DOSTAVE</span>
-                  <NuxtLink :to="`/delivery/${del.id.split('#')[1]}`" class="font-mono text-sm font-black text-gray-900 hover:text-yellow-600 underline truncate block">
+                  <NuxtLink :to="`/tracking/${del.id.split('#')[1]}`" class="font-mono text-sm font-black text-gray-900 hover:text-yellow-600 underline truncate block">
                     {{ del.id.split('#')[1] }}
                   </NuxtLink>
-                  <span class="text-xs text-gray-500 font-medium block mt-1">{{ del.date }}</span>
+                  <span class="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 inline-flex items-center gap-1 mt-1">
+                    <UIcon name="i-lucide-calendar" class="w-3.5 h-3.5" /> {{ del.date }}
+                  </span>
                 </div>
 
                 <div class="lg:col-span-3 min-w-0">
@@ -217,54 +328,56 @@ const formatPrice = (price: number) => {
                   <p class="text-[11px] font-mono text-gray-500 mt-1">{{ del.phone }}</p>
                 </div>
 
-                <div class="lg:col-span-2">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Specifikacija</span>
+                <div class="lg:col-span-3">
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Teret i cijena</span>
                   <div class="flex flex-wrap gap-1.5 mt-1">
                     <UBadge color="gray" variant="solid" size="xs" class="font-bold">{{ del.itemsCount }} kom</UBadge>
-                    <UBadge color="gray" variant="solid" size="xs" class="font-bold">{{ del.volume }} m³</UBadge>
-                    <UBadge color="gray" variant="solid" size="xs" class="font-bold">{{ del.weight }} kg</UBadge>
+                    <UBadge color="yellow" variant="soft" size="xs" class="font-bold">{{ del.volume }} m³</UBadge>
+                    <UBadge color="blue" variant="soft" size="xs" class="font-bold">{{ del.weight }} kg</UBadge>
                   </div>
-                  <div v-if="del.isLocker" class="mt-2 flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 max-w-max">
-                    <UIcon name="i-lucide-key" class="w-3 h-3" /> PIN: {{ del.lockerPin }}
+                  <span class="text-sm font-black text-green-600 block mt-2">{{ formatPrice(del.price) }}</span>
+                </div>
+
+                <div class="lg:col-span-4 flex flex-col gap-2 border-l border-gray-100 pl-4">
+                  <div>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Status</span>
+                    <select
+                      :value="del.status"
+                      @change="(e) => updateStatus(del.id, e)"
+                      class="block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-yellow-500 text-sm bg-white shadow-sm cursor-pointer outline-none transition-all hover:ring-gray-400"
+                    >
+                      <option value="ZAPRIMLJENO">Zaprimljeno (Aktivno)</option>
+                      <option value="U_OBRADI">U obradi</option>
+                      <option value="ČEKA PRIKUP">Čeka prikup (IKEA)</option>
+                      <option value="U_TRANZITU">U tranzitu</option>
+                      <option value="DOSTAVLJENO">Dostavljeno</option>
+                      <option value="OTKAZANO">Otkazano</option>
+                    </select>
                   </div>
-                </div>
 
-                <div class="lg:col-span-1">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Cijena</span>
-                  <span class="text-base font-black text-gray-900 block">{{ formatPrice(del.price) }}</span>
-                </div>
+                  <div class="flex items-center gap-2 mt-1">
+                    <UButton
+                      v-if="del.status !== 'DOSTAVLJENO' && del.status !== 'OTKAZANO'"
+                      size="xs"
+                      color="orange"
+                      variant="soft"
+                      icon="i-lucide-calendar-clock"
+                      class="font-bold flex-1 justify-center"
+                      @click="postponeToNextDay(del.id)"
+                    >
+                      Odgodi (+1 dan)
+                    </UButton>
 
-                <div class="lg:col-span-2">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Trenutni Status</span>
-                  <UBadge
-                    :color="del.status === 'DOSTAVLJENO' ? 'green' : 'amber'"
-                    variant="subtle"
-                    class="font-black text-[10px] tracking-wider mt-1 px-2.5 py-1 rounded-md"
-                  >
-                    {{ del.status.replace('_', ' ') }}
-                  </UBadge>
-                </div>
-
-                <div class="lg:col-span-2 w-full">
-                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Upravljanje statusom</span>
-                  <USelect
-                    :model-value="del.status"
-                    :options="statusOptions"
-                    size="sm"
-                    class="w-full"
-                    @update:model-value="(val) => updateStatus(del.id, val)"
-                  />
-
-                  <UButton
-                    size="xs"
-                    color="gray"
-                    variant="ghost"
-                    icon="i-lucide-external-link"
-                    :to="`/tracking/${del.id.split('#')[1]}`"
-                    class="mt-2 text-gray-500 font-bold hover:text-black w-full justify-start pl-1"
-                  >
-                    Otvori javni tracking
-                  </UButton>
+                    <UButton
+                      size="xs"
+                      color="gray"
+                      variant="ghost"
+                      icon="i-lucide-external-link"
+                      :to="`/tracking/${del.id.split('#')[1]}`"
+                      class="text-gray-500"
+                      title="Otvori tracking link"
+                    />
+                  </div>
                 </div>
 
               </div>
