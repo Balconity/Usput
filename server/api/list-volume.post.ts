@@ -12,8 +12,6 @@ export default defineEventHandler(async (event) => {
       return { success: false, error: 'Molimo unesite ispravnu IKEA poveznicu.' }
     }
 
-    console.log('Prosljeđujem zahtjev na EC2 API...', listUrl)
-
     // OVDJE KORISTIMO VARIJABLU IZ RUNTIMECONFIG-A:
     const ec2ApiUrl = config.apiUrl
 

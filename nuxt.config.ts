@@ -11,6 +11,10 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     apiUrl: process.env.API_URL,
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT,
+    smtpUser: process.env.SMTP_USER,
+    smtpPass: process.env.SMTP_PASS,
 
     public: {
 
@@ -19,7 +23,7 @@ export default defineNuxtConfig({
 
   security: {
     rateLimiter: {
-      tokensPerInterval: 5,
+      tokensPerInterval: 150,
       interval: 60000,
       fireImmediately: true,
       throwError: true
@@ -31,7 +35,7 @@ export default defineNuxtConfig({
     '/api/**': {
       security: {
         rateLimiter: {
-          tokensPerInterval: 5,
+          tokensPerInterval: 150,
           interval: 60000
         }
       }
