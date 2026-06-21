@@ -1,13 +1,23 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
-const client = new DynamoDBClient({ region: "eu-central-1" });
-const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = "Usput";
 
 export default defineEventHandler(async () => {
-  try {
+  // Povlačenje ključeva
+  const config = useRuntimeConfig();
 
+  // Eksplicitna inicijalizacija unutar handlera
+  const client = new DynamoDBClient({
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: config.awsAccessKey,
+      secretAccessKey: config.awsSecretKey
+    }
+  });
+  const docClient = DynamoDBDocumentClient.from(client);
+
+  try {
     const data = await docClient.send(new ScanCommand({
       TableName: TABLE_NAME,
       FilterExpression: "begins_with(PK, :prefix)",

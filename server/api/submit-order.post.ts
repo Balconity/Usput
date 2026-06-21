@@ -2,19 +2,27 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import nodemailer from "nodemailer";
 
-// Čista inicijalizacija - AWS Amplify će automatski koristiti svoju IAM ulogu
-const client = new DynamoDBClient({ region: "eu-central-1" });
-const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = "Usput";
 
 export default defineEventHandler(async (event) => {
+  // 1. Povlačenje varijabli iz nuxt.config
   const config = useRuntimeConfig();
+
+  // 2. Inicijalizacija baze pomoću eksplicitno definiranih ključeva iz konfiguracije
+  const client = new DynamoDBClient({
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: config.awsAccessKey,
+      secretAccessKey: config.awsSecretKey
+    }
+  });
+  const docClient = DynamoDBDocumentClient.from(client);
 
   try {
     const orderData = await readBody(event);
     const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    // 1. SPREMANJE U BAZU
+    // 3. SPREMANJE U BAZU
     await docClient.send(new PutCommand({
       TableName: TABLE_NAME,
       Item: {
@@ -26,7 +34,7 @@ export default defineEventHandler(async (event) => {
       }
     }));
 
-    // 2. PRIPREMA E-MAIL SUSTAVA
+    // 4. PRIPREMA E-MAIL SUSTAVA
     const transporter = nodemailer.createTransport({
       host: config.smtpHost,
       port: Number(config.smtpPort) || 465,
@@ -37,7 +45,7 @@ export default defineEventHandler(async (event) => {
       },
     });
 
-    // 3. E-MAIL ZA KUPCA (Potvrda)
+    // 5. E-MAIL ZA KUPCA (Potvrda)
     const customerMailOptions = {
       from: `"Usput Dostava" <${config.smtpUser}>`,
       to: orderData.personalInfo.email,
@@ -65,7 +73,7 @@ export default defineEventHandler(async (event) => {
       `
     };
 
-    // 4. E-MAIL ZA TEBE (Admin obavijest)
+    // 6. E-MAIL ZA TEBE (Admin obavijest s tvojom domenom)
     const adminMailOptions = {
       from: `"Usput Sustav" <${config.smtpUser}>`,
       to: config.smtpUser,
@@ -84,7 +92,7 @@ export default defineEventHandler(async (event) => {
       `
     };
 
-    // 5. SLANJE MAILOVA U POZADINI
+    // 7. SLANJE MAILOVA U POZADINI
     Promise.all([
       transporter.sendMail(customerMailOptions),
       transporter.sendMail(adminMailOptions)

@@ -15,6 +15,8 @@ export default defineNuxtConfig({
     smtpPort: process.env.SMTP_PORT,
     smtpUser: process.env.SMTP_USER,
     smtpPass: process.env.SMTP_PASS,
+    awsAccessKey: process.env.ACCESS_KEY_ID,
+    awsSecretKey: process.env.SECRET_ACCESS_KEY,
 
     public: {
 
