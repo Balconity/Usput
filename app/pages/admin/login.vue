@@ -47,60 +47,97 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans">
-    <div class="max-w-md w-full">
+  <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black">
 
-      <div class="text-center mb-6">
-        <h1 class="text-3xl font-black text-gray-900 tracking-tight">Usput Dostava</h1>
-        <p class="text-gray-500 mt-1 text-sm">Autorizirajte se za pristup administraciji</p>
+    <!-- ZAJEDNIČKI HEADER -->
+    <AppHeader />
+
+    <!-- GLAVNI SADRŽAJ (Centrirana forma) -->
+    <main class="flex-grow flex items-center justify-center p-4 relative overflow-hidden">
+
+      <!-- Dekorativni pozadinski elementi (Blobs) -->
+      <div class="absolute top-[0%] left-[-10%] w-96 h-96 bg-yellow-400/20 rounded-full blur-3xl pointer-events-none z-0"></div>
+      <div class="absolute bottom-[0%] right-[-10%] w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none z-0"></div>
+
+      <div class="max-w-md w-full relative z-10 animate-fade-in my-12">
+
+        <!-- Branding i Naslov -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 mb-4">
+            <UIcon name="i-lucide-lock" class="w-8 h-8 text-yellow-500" />
+          </div>
+          <h1 class="text-4xl font-black text-gray-900 tracking-tight mb-2">
+            Usput<span class="text-yellow-500">.</span>
+          </h1>
+          <p class="text-gray-500 font-medium">Administrativno sučelje</p>
+        </div>
+
+        <!-- Login Kartica -->
+        <UCard class="shadow-2xl shadow-gray-200/50 rounded-3xl ring-1 ring-gray-100 bg-white/90 backdrop-blur-sm p-4 sm:p-6">
+          <form @submit.prevent="handleLogin" class="space-y-6">
+
+            <UAlert
+              v-if="errorMessage"
+              icon="i-lucide-alert-circle"
+              color="red"
+              variant="soft"
+              title="Greška pri prijavi"
+              :description="errorMessage"
+              class="mb-2 font-medium"
+            />
+
+            <div class="space-y-5">
+              <UFormField label="Korisničko ime" required>
+                <UInput
+                  v-model="username"
+                  placeholder="Unesite korisničko ime"
+                  icon="i-lucide-user"
+                  size="xl"
+                  autocomplete="username"
+                  class="w-full bg-white font-medium"
+                />
+              </UFormField>
+
+              <UFormField label="Lozinka" required>
+                <UInput
+                  v-model="password"
+                  type="password"
+                  placeholder="••••••••"
+                  icon="i-lucide-key"
+                  size="xl"
+                  autocomplete="current-password"
+                  class="w-full bg-white font-medium tracking-widest placeholder:tracking-normal"
+                />
+              </UFormField>
+            </div>
+
+            <UButton
+              type="submit"
+              size="xl"
+              block
+              class="font-black mt-8 shadow-lg hover:-translate-y-0.5 transition-transform"
+              style="background-color: #facc15; color: #000;"
+              :loading="isLoading"
+              trailing-icon="i-lucide-arrow-right"
+            >
+              Prijavi se
+            </UButton>
+
+          </form>
+        </UCard>
+
       </div>
+    </main>
 
-      <UCard class="shadow-xl rounded-3xl ring-1 ring-gray-200 bg-white p-2">
-        <form @submit.prevent="handleLogin" class="space-y-4 p-4">
-
-          <UAlert
-            v-if="errorMessage"
-            icon="i-lucide-alert-circle"
-            color="red"
-            variant="soft"
-            title="Greška pri prijavi"
-            :description="errorMessage"
-            class="mb-2"
-          />
-
-          <UFormGroup label="Korisničko ime" name="username" required>
-            <UInput
-              v-model="username"
-              placeholder="Unesite korisničko ime"
-              icon="i-lucide-user"
-              size="lg"
-              autocomplete="username"
-            />
-          </UFormGroup>
-
-          <UFormGroup label="Lozinka" name="password" required>
-            <UInput
-              v-model="password"
-              type="password"
-              placeholder="Unesite lozinku"
-              icon="i-lucide-lock"
-              size="lg"
-              autocomplete="current-password"
-            />
-          </UFormGroup>
-
-          <UButton
-            type="submit"
-            color="black"
-            size="lg"
-            block
-            class="font-bold mt-4"
-            :loading="isLoading"
-          >
-            Prijavi se
-          </UButton>
-        </form>
-      </UCard>
-    </div>
+    <!-- ZAJEDNIČKI FOOTER -->
+    <AppFooter />
   </div>
 </template>
+
+<style scoped>
+.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
