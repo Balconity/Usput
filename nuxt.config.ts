@@ -17,10 +17,11 @@ export default defineNuxtConfig({
     smtpPass: process.env.SMTP_PASS,
     awsAccessKey: process.env.ACCESS_KEY_ID,
     awsSecretKey: process.env.SECRET_ACCESS_KEY,
+    // Ovi ključevi se čitaju iz tvoje .env datoteke
+    adminUsername: process.env.ADMIN_USERNAME,
+    adminPassword: process.env.ADMIN_PASSWORD,
 
-    public: {
-
-    }
+    public: {}
   },
 
   security: {
@@ -34,6 +35,15 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
+    // SPAM zaštita za naručivanje ostaje aktivna
+    '/api/submit-order': {
+      security: {
+        rateLimiter: {
+          tokensPerInterval: 3,
+          interval: 3600000
+        }
+      }
+    },
     '/api/**': {
       security: {
         rateLimiter: {

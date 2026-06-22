@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const emit = defineEmits(['status-changed'])
 
-// --- KONFIGURACIJA CIJENA I VOZILA ---
+// --- KONFIGURACIJA CIJENA ---
 const pricingConfig = {
   basePrice: 5,
   roomDeliverySurcharge: 25,
@@ -22,10 +22,32 @@ const pricingConfig = {
   ]
 }
 
-const contactConfig = { phone: '091 234 5678', email: 'info@balconity.hr' }
+const contactConfig = { phone: '091 234 5678', email: 'contact@balconity.hr' }
 
-const myVehicle = { name: 'Usput Dostavno Vozilo', maxLength: 200, maxWidth: 110, maxHeight: 90, weightCapacity: 500 }
-const VEHICLE_VOLUME = Number(((myVehicle.maxLength * myVehicle.maxWidth * myVehicle.maxHeight) / 1000000).toFixed(2))
+// --- DINAMIČKO DOHVAĆANJE VOZILA IZ BAZE ---
+const myVehicle = ref({
+  name: 'Usput Dostavno Vozilo',
+  maxLength: 200,
+  maxWidth: 110,
+  maxHeight: 90,
+  maxWeight: 500
+})
+
+const { data: vehicleData } = await useFetch('/api/admin/settings/vehicle')
+
+if (vehicleData.value?.success && vehicleData.value?.data) {
+  myVehicle.value = {
+    name: 'Usput Vozilo',
+    maxLength: vehicleData.value.data.length || 200,
+    maxWidth: vehicleData.value.data.width || 110,
+    maxHeight: vehicleData.value.data.height || 90,
+    maxWeight: vehicleData.value.data.maxWeight || 500
+  }
+}
+
+const VEHICLE_VOLUME = computed(() => {
+  return Number(((myVehicle.value.maxLength * myVehicle.value.maxWidth * myVehicle.value.maxHeight) / 1000000).toFixed(2))
+})
 
 // --- STANJA APLIKACIJE ---
 type Step = 'calculator' | 'reserved' | 'contact_info' | 'ikea_details' | 'delivery_details' | 'success'
@@ -79,19 +101,12 @@ const totalVolume = ref(0)
 const totalWeight = ref(0)
 const deliveryPrice = ref(0)
 
-// Inteligentno grupiranje paketa po krovnom proizvodu (roditelju)
 const groupedProducts = computed(() => {
   const groups: any[] = [];
 
   detectedItems.value.forEach(item => {
     if (item.price > 0) {
-      groups.push({
-        code: item.code,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        packages: []
-      });
+      groups.push({ code: item.code, name: item.name, price: item.price, image: item.image, packages: [] });
     }
 
     if (item.dimensions && (item.dimensions.volume > 0 || item.dimensions.weight > 0)) {
@@ -99,13 +114,7 @@ const groupedProducts = computed(() => {
       if (currentGroup) {
         currentGroup.packages.push(item);
       } else {
-        groups.push({
-          code: item.code,
-          name: item.name,
-          price: 0,
-          image: item.image,
-          packages: [item]
-        });
+        groups.push({ code: item.code, name: item.name, price: 0, image: item.image, packages: [item] });
       }
     }
   });
@@ -115,12 +124,7 @@ const groupedProducts = computed(() => {
     const totalWeight = g.packages.reduce((sum: number, p: any) => sum + (p.dimensions.weight * p.quantity), 0);
     const totalVolume = g.packages.reduce((sum: number, p: any) => sum + (p.dimensions.volume * p.quantity), 0);
 
-    return {
-      ...g,
-      totalBoxes,
-      totalWeight: Number(totalWeight.toFixed(2)),
-      totalVolume: Number(totalVolume.toFixed(3))
-    };
+    return { ...g, totalBoxes, totalWeight: Number(totalWeight.toFixed(2)), totalVolume: Number(totalVolume.toFixed(3)) };
   });
 });
 
@@ -221,11 +225,30 @@ async function runVolumeCheck() {
   startLoadingAnimation()
 
   try {
-    const response = await $fetch('/api/list-volume', { method: 'POST', body: { url: listUrl.value } })
+    let targetUrl = listUrl.value
+
+    if (!targetUrl.includes('www.ikea.com') || targetUrl.includes(' ')) {
+      const parseResponse: any = await $fetch('/api/parse-cart', {
+        method: 'POST',
+        body: { text: targetUrl }
+      })
+
+      if (parseResponse && parseResponse.success) {
+        targetUrl = parseResponse.finalWebUrl
+        listUrl.value = targetUrl
+      }
+    }
+
+    const response = await $fetch('/api/list-volume', { method: 'POST', body: { url: targetUrl } })
     await new Promise(r => setTimeout(r, 800))
     handleVolumeResponse(response)
+
   } catch (error: any) {
-    volumeResult.value = { status: 'error', title: 'Greška', message: 'Nismo uspjeli očitati sustav. Provjerite link.' }
+    volumeResult.value = {
+      status: 'error',
+      title: 'Greška',
+      message: error.statusMessage || 'Nismo uspjeli očitati sustav. Provjerite link.'
+    }
   } finally {
     stopLoadingAnimation()
     setTimeout(() => { isCalculating.value = false }, 500)
@@ -243,8 +266,34 @@ function handleVolumeResponse(response: any) {
       detectedItems.value = data.parsedItems
     }
 
-    if (totalVolume.value > VEHICLE_VOLUME || totalWeight.value > myVehicle.weightCapacity) {
-      volumeResult.value = { status: 'error', title: 'Premašen kapacitet.', message: `Vaša narudžba (${totalVolume.value} m³ / ${totalWeight.value} kg) je veća od ukupnog kapaciteta vozila.` }
+    // Poredamo dimenzije vozila od najveće prema najmanjoj
+    const vehicleDims = [myVehicle.value.maxLength, myVehicle.value.maxWidth, myVehicle.value.maxHeight].sort((a, b) => b - a);
+    let oversizedPackage = null;
+
+    // Provjera svakog paketa stane li fizički u vozilo (uz dozvoljeno okretanje)
+    for (const item of detectedItems.value) {
+      if (item.dimensions) {
+        const { length = 0, width = 0, height = 0 } = item.dimensions;
+        const pkgDims = [length, width, height].sort((a, b) => b - a);
+
+        if (pkgDims[0] > vehicleDims[0] || pkgDims[1] > vehicleDims[1] || pkgDims[2] > vehicleDims[2]) {
+          oversizedPackage = item;
+          break; // Pronađen prevelik paket, prekidamo pretragu
+        }
+      }
+    }
+
+    // EVALUACIJA REZULTATA
+    if (totalVolume.value > VEHICLE_VOLUME.value) {
+      volumeResult.value = { status: 'error', title: 'Premašen kapacitet volumena.', message: `Vaša narudžba (${totalVolume.value} m³) je veća od ukupnog volumena vozila (${VEHICLE_VOLUME.value} m³).` }
+    } else if (totalWeight.value > myVehicle.value.maxWeight) {
+      volumeResult.value = { status: 'error', title: 'Premašena nosivost.', message: `Vaša narudžba (${totalWeight.value} kg) je teža od maksimalne nosivosti vozila (${myVehicle.value.maxWeight} kg).` }
+    } else if (oversizedPackage) {
+      volumeResult.value = {
+        status: 'error',
+        title: 'Paket je prevelik!',
+        message: `Artikl "${oversizedPackage.name}" ima dimenzije (${oversizedPackage.dimensions.length}×${oversizedPackage.dimensions.width}×${oversizedPackage.dimensions.height} cm) koje fizički ne stanu u naše vozilo.`
+      }
     } else {
       volumeResult.value = { status: 'success', title: 'Sve stane!', message: `Ovu pošiljku možemo uspješno dovesti.` }
     }
@@ -308,7 +357,7 @@ function proceedToDelivery() {
 async function submitFinalOrder() {
   formError.value = ''
 
-  if (orderState.website !== '') return // Honeypot provjera
+  if (orderState.website !== '') return
 
   if (!orderState.street || !orderState.city || !orderState.zip) {
     formError.value = 'Molimo unesite punu adresu isporuke.'
@@ -353,7 +402,6 @@ async function submitFinalOrder() {
       }
     };
 
-    // Poziv internog Nuxt.js API-ja
     const response = await $fetch('/api/submit-order', {
       method: 'POST',
       body: orderPayload
@@ -406,13 +454,13 @@ async function submitFinalOrder() {
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <UFormGroup label="Datum preuzimanja u Zagrebu" help="Ponudili smo prvi slobodan termin">
-              <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" />
-            </UFormGroup>
+            <UFormField label="Datum preuzimanja u Zagrebu" help="Ponudili smo prvi slobodan termin">
+              <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" class="w-full" />
+            </UFormField>
           </div>
 
-          <UFormGroup label="Usluga istovara na adresi">
-            <div class="flex gap-4 mt-1">
+          <UFormField label="Usluga istovara na adresi">
+            <div class="flex gap-4 mt-1 w-full">
               <label class="flex-1 relative flex cursor-pointer rounded-xl border p-3 hover:bg-gray-50 transition-colors"
                      :class="deliveryOption === 'curbside' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 bg-white'">
                 <input type="radio" v-model="deliveryOption" value="curbside" class="sr-only" @change="recalculatePrice" />
@@ -431,18 +479,17 @@ async function submitFinalOrder() {
                 </div>
               </label>
             </div>
-          </UFormGroup>
+          </UFormField>
 
-          <UFormGroup label="Poveznica popisa ili podijeljene košarice" help="U košarici ili popisu kliknite na gumb 'Podijeli'.">
-            <UInput v-model="listUrl" type="url" placeholder="https://www.ikea.com/hr/hr/favourites/list/..." size="xl" icon="i-lucide-search" />
-          </UFormGroup>
+          <UFormField label="Poveznica popisa ili podijeljene košarice" help="Zalijepite klasični link ili cijelu poruku iz IKEA mobilne aplikacije.">
+            <UInput v-model="listUrl" type="text" placeholder="Zalijepite link ili poruku s mobitela..." size="xl" icon="i-lucide-search" class="w-full" />
+          </UFormField>
 
           <UButton block class="mt-2 font-bold shadow-md transform transition-transform hover:-translate-y-0.5" style="background-color: #facc15; color: #000;" size="xl" :disabled="!listUrl || !pickupDate" @click="runVolumeCheck">
             Provjeri gabarite i cijenu
           </UButton>
         </div>
 
-        <!-- SPINNING ANIMACIJA UČITAVANJA -->
         <div v-if="isCalculating" class="mt-6 p-6 border border-yellow-200 rounded-xl flex flex-col items-center text-center bg-white">
           <div class="absolute inset-0 bg-yellow-50/50 animate-pulse"></div>
           <div class="relative z-10 flex flex-col items-center w-full">
@@ -455,14 +502,12 @@ async function submitFinalOrder() {
           </div>
         </div>
 
-        <!-- PRIKAZ REZULTATA NAKON AKCIJE -->
         <div v-if="volumeResult && !isCalculating" class="animate-fade-in space-y-6">
 
-          <!-- OBAVIJEST -->
           <UAlert v-if="volumeResult.status === 'error'" color="red" variant="soft" icon="i-lucide-alert-circle" :title="volumeResult.title" :description="volumeResult.message" class="font-bold" />
           <UAlert v-else color="green" variant="soft" icon="i-lucide-check-circle" :title="volumeResult.title" :description="volumeResult.message" class="font-bold" />
 
-          <!-- METRIKE -->
+          <!-- METRIKE BAZIRANE NA PODACIMA IZ BAZE -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
               <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Ukupan volumen</p>
@@ -471,8 +516,8 @@ async function submitFinalOrder() {
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
               <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Ukupna težina</p>
-              <p class="text-2xl font-black" :class="totalWeight > myVehicle.weightCapacity ? 'text-red-600' : 'text-gray-900'">{{ totalWeight }} kg</p>
-              <p class="text-[10px] text-gray-500 mt-0.5">Vozilo prima maks. {{ myVehicle.weightCapacity }} kg</p>
+              <p class="text-2xl font-black" :class="totalWeight > myVehicle.maxWeight ? 'text-red-600' : 'text-gray-900'">{{ totalWeight }} kg</p>
+              <p class="text-[10px] text-gray-500 mt-0.5">Vozilo prima maks. {{ myVehicle.maxWeight }} kg</p>
             </div>
             <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
               <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Cijena dostave</p>
@@ -481,7 +526,6 @@ async function submitFinalOrder() {
             </div>
           </div>
 
-          <!-- DETALJNA TABLICA (GRUPIRANA PO RODITELJU) -->
           <div v-if="groupedProducts.length > 0">
             <h4 class="text-base font-extrabold text-gray-900 mb-3 flex items-center gap-2">
               <UIcon name="i-lucide-shopping-bag" class="w-5 h-5 text-yellow-500" />
@@ -491,7 +535,6 @@ async function submitFinalOrder() {
             <div class="space-y-4">
               <div v-for="group in groupedProducts" :key="group.code" class="border border-gray-200 rounded-2xl overflow-hidden shadow-md bg-white">
 
-                <!-- RODITELJSKA KARTICA -->
                 <div class="bg-gray-900 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 text-white">
                   <div class="flex items-center gap-3">
                     <img v-if="group.image" :src="group.image" class="w-14 h-14 object-contain rounded-xl border bg-white shrink-0 shadow-sm" />
@@ -514,7 +557,6 @@ async function submitFinalOrder() {
                   </div>
                 </div>
 
-                <!-- SPECIFIKACIJA TRANSPORTNIH PAKETA -->
                 <div class="p-3 bg-gray-50/50">
                   <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 pb-2">Transportna specifikacija kutija:</p>
                   <ul class="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-inner">
@@ -548,14 +590,12 @@ async function submitFinalOrder() {
               </div>
             </div>
 
-            <!-- UKUPNA CIJENA KOŠARICE -->
             <div v-if="totalIkeaCartPrice > 0" class="bg-gray-900 px-5 py-4 rounded-2xl flex justify-between items-center text-sm text-white mt-4 shadow-md">
               <span class="font-bold text-gray-400">Ukupna vrijednost IKEA košarice:</span>
               <span class="font-black text-yellow-400 text-lg">{{ totalIkeaCartPrice }} €</span>
             </div>
           </div>
 
-          <!-- REZERVACIJA TERMINA -->
           <div v-if="volumeResult.status === 'success'" class="space-y-4 pt-2">
             <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
               <span class="text-sm font-medium text-gray-700">Trebate li ipak unos robe u kuću/stan?</span>
@@ -613,9 +653,9 @@ async function submitFinalOrder() {
           <p class="text-sm text-gray-500">S kim komuniciramo oko isporuke na adresu?</p>
         </div>
 
-        <UFormGroup label="Vaše ime i prezime" required><UInput v-model="orderState.name" placeholder="Npr. Ivan Horvat" size="lg" icon="i-lucide-user" /></UFormGroup>
-        <UFormGroup label="E-mail adresa" required><UInput v-model="orderState.email" type="email" placeholder="ivan@primjer.com" size="lg" icon="i-lucide-mail" /></UFormGroup>
-        <UFormGroup label="Broj mobitela" required><UInput v-model="orderState.phone" type="tel" placeholder="091 234 5678" size="lg" icon="i-lucide-phone" /></UFormGroup>
+        <UFormField label="Vaše ime i prezime" required><UInput v-model="orderState.name" placeholder="Npr. Ivan Horvat" size="lg" icon="i-lucide-user" class="w-full" /></UFormField>
+        <UFormField label="E-mail adresa" required><UInput v-model="orderState.email" type="email" placeholder="ivan@primjer.com" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
+        <UFormField label="Broj mobitela" required><UInput v-model="orderState.phone" type="tel" placeholder="091 234 5678" size="lg" icon="i-lucide-phone" class="w-full" /></UFormField>
 
         <div class="flex gap-4 pt-4 border-t border-gray-100">
           <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton>
@@ -630,8 +670,8 @@ async function submitFinalOrder() {
           <p class="text-sm text-gray-500">Ovi podaci su nam nužni za praćenje statusa pošiljke u paketomatu.</p>
         </div>
 
-        <UFormGroup label="Broj narudžbe" required><UInput v-model="orderState.ikeaOrderNumber" placeholder="Npr. 123456789" size="lg" icon="i-lucide-hash" /></UFormGroup>
-        <UFormGroup label="E-mail s kojim je naručeno" required><UInput v-model="orderState.ikeaEmail" type="email" placeholder="ivan@primjer.com" size="lg" icon="i-lucide-mail" /></UFormGroup>
+        <UFormField label="Broj narudžbe" required><UInput v-model="orderState.ikeaOrderNumber" placeholder="Npr. 123456789" size="lg" icon="i-lucide-hash" class="w-full" /></UFormField>
+        <UFormField label="E-mail s kojim je naručeno" required><UInput v-model="orderState.ikeaEmail" type="email" placeholder="ivan@primjer.com" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
 
         <div class="flex gap-4 pt-4 border-t border-gray-100 mt-6">
           <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton>
@@ -647,23 +687,23 @@ async function submitFinalOrder() {
         </div>
 
         <input v-model="orderState.website" type="text" class="hidden" />
-        <UFormGroup label="Ulica i kućni broj" required><UInput v-model="orderState.street" placeholder="Zagrebačka ulica 1" size="lg" icon="i-lucide-map-pin" /></UFormGroup>
+        <UFormField label="Ulica i kućni broj" required><UInput v-model="orderState.street" placeholder="Zagrebačka ulica 1" size="lg" icon="i-lucide-map-pin" class="w-full" /></UFormField>
 
         <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Grad" required><UInput v-model="orderState.city" placeholder="Varaždin" size="lg" /></UFormGroup>
-          <UFormGroup label="Poštanski broj" required><UInput v-model="orderState.zip" placeholder="42000" size="lg" /></UFormGroup>
+          <UFormField label="Grad" required><UInput v-model="orderState.city" placeholder="Varaždin" size="lg" class="w-full" /></UFormField>
+          <UFormField label="Poštanski broj" required><UInput v-model="orderState.zip" placeholder="42000" size="lg" class="w-full" /></UFormField>
         </div>
 
         <div v-if="deliveryOption === 'room'" class="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-2">
-          <UFormGroup label="Tip objekta i kat" required>
-            <div class="flex gap-4 mt-2">
+          <UFormField label="Tip objekta i kat" required>
+            <div class="flex gap-4 mt-2 w-full">
               <select v-model="orderState.objectType" class="w-1/2 rounded-lg border border-gray-300 shadow-sm text-sm p-2 bg-white">
                 <option value="kuca">Kuća</option>
                 <option value="zgrada">Zgrada / Stan</option>
               </select>
               <UInput v-model="orderState.floor" :disabled="orderState.objectType === 'kuca'" :placeholder="orderState.objectType === 'kuca' ? 'Nije primjenjivo' : 'Koji kat?'" class="w-1/2" size="lg" />
             </div>
-          </UFormGroup>
+          </UFormField>
 
           <div v-if="orderState.objectType === 'zgrada'" class="mt-4 pt-4 border-t border-gray-200">
             <UCheckbox v-model="orderState.hasElevator" color="yellow" class="font-bold text-gray-900">
@@ -672,7 +712,7 @@ async function submitFinalOrder() {
           </div>
         </div>
 
-        <UFormGroup label="Napomena za vozača (Opcionalno)"><UTextarea v-model="orderState.notes" placeholder="Ima li posebnih uputa?" /></UFormGroup>
+        <UFormField label="Napomena za vozača (Opcionalno)"><UTextarea v-model="orderState.notes" placeholder="Ima li posebnih uputa?" class="w-full" /></UFormField>
 
         <div class="flex gap-4 pt-4 border-t border-gray-100">
           <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton>
@@ -701,7 +741,6 @@ async function submitFinalOrder() {
           </div>
         </div>
       </div>
-
     </div>
   </div>
 </template>

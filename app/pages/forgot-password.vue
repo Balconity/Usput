@@ -58,7 +58,7 @@ async function handleResetPassword() {
       </form>
 
       <div class="mt-6 text-center">
-        <NuxtLink to="/login" class="text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors">
+        <NuxtLink to="/admin/login" class="text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors">
           Back to Login
         </NuxtLink>
       </div>

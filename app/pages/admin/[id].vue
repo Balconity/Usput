@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import { ref, computed } from 'vue'
 
 const route = useRoute()
 const orderId = route.params.id
 
-// Dohvaćanje specifične narudžbe iz baze
-const { data, pending, error } = await useFetch(`/api/admin/orders/${orderId}`)
+const { data, pending, error, refresh } = await useFetch(`/api/admin/orders/${orderId}`)
 
 const formatDate = (isoString: string) => {
   if (!isoString) return ''
@@ -16,6 +16,56 @@ const formatDate = (isoString: string) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// --- LOGIKA ZA PROMJENU STATUSA (LINEARNI TIJEK) ---
+const isUpdating = ref(false)
+
+const availableStatuses = [
+  { value: 'NOVO', label: 'NOVO (Zaprimljeno)', color: 'gray' },
+  { value: 'U_OBRADI', label: 'U OBRADI (Čeka se PIN)', color: 'yellow' },
+  { value: 'NA_PUTU_DO_IKEA', label: 'NA PUTU DO IKEA-e (Slijedi utovar)', color: 'blue' },
+  { value: 'PREUZETO', label: 'PREUZETO (Na putu do kupca)', color: 'purple' },
+  { value: 'DOSTAVLJENO', label: 'DOSTAVLJENO (Završeno)', color: 'green' }
+]
+
+const currentStatusValue = computed(() => data.value?.order?.status || 'NOVO')
+
+const currentBadgeColor = computed(() => {
+  const match = availableStatuses.find(s => s.value === currentStatusValue.value)
+  return match ? match.color : 'gray'
+})
+
+// Pronalazak SLJEDEĆEG statusa u nizu
+const nextStatusAction = computed(() => {
+  const currentIndex = availableStatuses.findIndex(s => s.value === currentStatusValue.value)
+  // Ako smo na zadnjem statusu (DOSTAVLJENO), nema idućeg koraka
+  if (currentIndex === -1 || currentIndex === availableStatuses.length - 1) {
+    return null
+  }
+  return availableStatuses[currentIndex + 1]
+})
+
+// Funkcija koja ažurira status na sljedeći
+async function updateToNextStatus() {
+  if (!nextStatusAction.value) return
+  isUpdating.value = true
+
+  try {
+    await $fetch(`/api/admin/orders/${orderId}`, {
+      method: 'PUT',
+      body: { status: nextStatusAction.value.value }
+    })
+
+    // Ponovno povuci podatke iz baze da se ekran osvježi
+    await refresh()
+
+  } catch (err) {
+    alert('Došlo je do greške prilikom promjene statusa.')
+    console.error(err)
+  } finally {
+    isUpdating.value = false
+  }
 }
 </script>
 
@@ -38,16 +88,17 @@ const formatDate = (isoString: string) => {
 
     <div v-else-if="data?.order" class="space-y-6">
 
-      <!-- HEADER NARUDŽBE -->
+      <!-- ZAGLAVLJE -->
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <!-- ISPRAVLJEN LINK ZA POVRATAK -->
           <UButton to="/admin/dashboard" color="gray" variant="ghost" icon="i-lucide-arrow-left" class="mb-4 -ml-2 font-bold">
             Nazad na popis
           </UButton>
           <div class="flex items-center gap-3 mb-1">
             <h1 class="text-3xl font-black text-gray-900">Narudžba</h1>
-            <UBadge color="green" size="lg" class="font-bold uppercase tracking-wider">{{ data.order.status || 'NOVO' }}</UBadge>
+            <UBadge :color="currentBadgeColor" size="lg" class="font-bold uppercase tracking-wider">
+              {{ currentStatusValue }}
+            </UBadge>
           </div>
           <p class="text-sm font-mono text-gray-500">{{ data.order.PK.replace('ORDER#', '') }}</p>
         </div>
@@ -57,10 +108,39 @@ const formatDate = (isoString: string) => {
         </div>
       </div>
 
+      <!-- KONTROLA STATUSA (BEZ SELECTA, SAMO GUMB ZA SLJEDEĆI KORAK) -->
+      <div class="shadow-sm border border-gray-200 rounded-xl p-5 border-l-4" :class="`border-l-${currentBadgeColor}-500 bg-${currentBadgeColor}-50`">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h3 class="font-bold text-gray-900">Napredak pošiljke</h3>
+            <p class="text-sm text-gray-600">Prelazak u sljedeću fazu automatski se prikazuje kupcu.</p>
+          </div>
+
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <!-- Prikazuje gumb samo ako postoji idući status -->
+            <UButton
+              v-if="nextStatusAction"
+              color="black"
+              size="lg"
+              icon="i-lucide-arrow-right"
+              trailing
+              :loading="isUpdating"
+              @click="updateToNextStatus"
+            >
+              Promijeni u: {{ nextStatusAction.label }}
+            </UButton>
+
+            <!-- Ako smo došli do kraja, ispisujemo poruku -->
+            <div v-else class="text-green-700 font-bold flex items-center gap-2 bg-green-100 px-4 py-2 rounded-lg">
+              <UIcon name="i-lucide-check-circle" class="w-6 h-6" /> Isporuka je završena
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- GLAVNE INFORMACIJE -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        <!-- Osobni podaci -->
         <UCard class="shadow-sm ring-1 ring-gray-200">
           <template #header><h3 class="font-bold text-lg flex items-center gap-2"><UIcon name="i-lucide-user" class="text-gray-400"/> Kupac i Kontakt</h3></template>
           <div class="space-y-3 text-sm">
@@ -71,7 +151,6 @@ const formatDate = (isoString: string) => {
           </div>
         </UCard>
 
-        <!-- Detalji dostave -->
         <UCard class="shadow-sm ring-1 ring-gray-200">
           <template #header><h3 class="font-bold text-lg flex items-center gap-2"><UIcon name="i-lucide-truck" class="text-gray-400"/> Isporuka na adresu</h3></template>
           <div class="space-y-3 text-sm">
@@ -91,7 +170,6 @@ const formatDate = (isoString: string) => {
           </div>
         </UCard>
 
-        <!-- IKEA Podaci -->
         <UCard class="shadow-sm ring-1 ring-gray-200 md:col-span-2 bg-gray-50">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div class="flex items-center gap-3">
@@ -169,7 +247,6 @@ const formatDate = (isoString: string) => {
           </div>
         </div>
       </div>
-
     </div>
   </div>
 </template>

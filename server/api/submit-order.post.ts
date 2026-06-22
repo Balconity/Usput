@@ -22,6 +22,9 @@ export default defineEventHandler(async (event) => {
     const orderData = await readBody(event);
     const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+    // Poveznica za praćenje koju šaljemo klijentu
+    const trackingUrl = `https://main.d3jhqcxxjwpkoo.amplifyapp.com/delivery/${orderId}`;
+
     // 3. SPREMANJE U BAZU
     await docClient.send(new PutCommand({
       TableName: TABLE_NAME,
@@ -45,7 +48,7 @@ export default defineEventHandler(async (event) => {
       },
     });
 
-    // 5. E-MAIL ZA KUPCA (Potvrda)
+    // 5. E-MAIL ZA KUPCA (Potvrda s tipkom za praćenje)
     const customerMailOptions = {
       from: `"Usput Dostava" <${config.smtpUser}>`,
       to: orderData.personalInfo.email,
@@ -63,6 +66,11 @@ export default defineEventHandler(async (event) => {
               <li><strong>Planirani datum:</strong> ${new Date(orderData.delivery.date).toLocaleDateString('hr-HR')}</li>
               <li><strong>Ukupno za naplatu:</strong> <span style="font-size: 18px; font-weight: bold;">${orderData.transport.price} €</span></li>
             </ul>
+          </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <p style="margin-bottom: 15px; font-weight: bold;">Trenutni status Vaše dostave možete pratiti ovdje:</p>
+            <a href="${trackingUrl}" style="display: inline-block; background-color: #facc15; color: #000000; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">Prati status narudžbe</a>
           </div>
 
           <p>Naš tim će uskoro pregledati Vaš zahtjev. Vozač će Vas kontaktirati prije samog dolaska na adresu.</p>
@@ -92,13 +100,15 @@ export default defineEventHandler(async (event) => {
       `
     };
 
-    // 7. SLANJE MAILOVA U POZADINI
-    Promise.all([
-      transporter.sendMail(customerMailOptions),
-      transporter.sendMail(adminMailOptions)
-    ]).catch(err => {
+    // 7. SLANJE MAILOVA (OBAVEZNO s 'await' da server sačeka izvršavanje)
+    try {
+      await Promise.all([
+        transporter.sendMail(customerMailOptions),
+        transporter.sendMail(adminMailOptions)
+      ]);
+    } catch (err) {
       console.error('Baza je uspješno spremljena, ali je došlo do greške pri slanju mailova:', err);
-    });
+    }
 
     return { success: true, orderId: orderId };
 

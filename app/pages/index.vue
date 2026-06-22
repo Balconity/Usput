@@ -16,7 +16,7 @@ appConfig.ui.gray = 'neutral'
           <span>Usput<span class="text-yellow-500">.</span></span>
         </div>
         <div class="flex items-center gap-4">
-          <NuxtLink to="/login" class="text-sm font-bold text-gray-600 hover:text-yellow-500 transition-colors">
+          <NuxtLink to="/admin/login" class="text-sm font-bold text-gray-600 hover:text-yellow-500 transition-colors">
             Prijava
           </NuxtLink>
           <UButton color="warning" variant="solid" label="Provjeri i naruči" icon="i-lucide-arrow-right" trailing to="#calculator" class="font-bold text-black" />
