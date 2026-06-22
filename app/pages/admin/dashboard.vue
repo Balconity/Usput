@@ -7,26 +7,46 @@ const { data, pending, error, refresh } = await useFetch('/api/admin/orders')
 const formatDate = (isoString: string) => {
   if (!isoString) return ''
   return new Date(isoString).toLocaleDateString('hr-HR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })
 }
 
 const columns = [
   { id: 'id', key: 'id', label: 'ID Narudžbe', accessorKey: 'id', header: 'ID Narudžbe' },
   { id: 'createdAt', key: 'createdAt', label: 'Zatraženo', accessorKey: 'createdAt', header: 'Zatraženo' },
-  { id: 'customer', key: 'customer', label: 'Kupac i Lokacija', accessorKey: 'customer', header: 'Kupac i Lokacija' },
+  { id: 'customer', key: 'customer', label: 'Kupac', accessorKey: 'customer', header: 'Kupac' },
   { id: 'pickupDate', key: 'pickupDate', label: 'Datum isporuke', accessorKey: 'pickupDate', header: 'Datum isporuke' },
   { id: 'status', key: 'status', label: 'Status', accessorKey: 'status', header: 'Status' },
   { id: 'actions', key: 'actions', label: 'Akcije', header: 'Akcije' }
 ]
 
+// Pomoćne funkcije za boje i nazive statusa
+const getStatusColor = (status: string) => {
+  const colors: Record<string, string> = {
+    'NOVO': 'gray',
+    'U_OBRADI': 'yellow',
+    'NA_PUTU_DO_IKEA': 'blue',
+    'PREUZETO': 'purple',
+    'DOSTAVLJENO': 'green',
+    'OTKAZANO': 'red'
+  }
+  return colors[status] || 'gray'
+}
+
+const getStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    'NOVO': 'Novo',
+    'U_OBRADI': 'U obradi',
+    'NA_PUTU_DO_IKEA': 'Utovar',
+    'PREUZETO': 'Preuzeto',
+    'DOSTAVLJENO': 'Dostavljeno',
+    'OTKAZANO': 'Otkazano'
+  }
+  return labels[status] || status
+}
+
 const tableRows = computed(() => {
   if (!data.value || !data.value.orders) return []
-
   return data.value.orders.map((o: any) => ({
     rawId: o?.PK ? o.PK.replace('ORDER#', '') : 'nepoznato',
     id: o?.PK ? o.PK.replace('ORDER#', '').substring(0, 14) + '...' : 'N/A',
@@ -37,36 +57,82 @@ const tableRows = computed(() => {
   }))
 })
 
-// --- 2. LOGIKA ZA POSTAVKE VOZILA ---
-const vehicle = ref({ length: 0, width: 0, height: 0, maxWeight: 0 })
-const isSavingVehicle = ref(false)
+// --- 2. LOGIKA ZA VOZNI PARK I NERADNE DANE ---
+const fleet = ref({
+  vehicles: [] as any[],
+  assignments: {} as Record<string, string>,
+  inactiveDates: [] as string[]
+})
+const isSavingFleet = ref(false)
 
 const { data: vehicleData } = await useFetch('/api/admin/settings/vehicle')
 if (vehicleData.value?.success && vehicleData.value?.data) {
-  vehicle.value = vehicleData.value.data
-}
-
-const vehicleVolume = computed(() => {
-  const vol = (vehicle.value.length * vehicle.value.width * vehicle.value.height) / 1000000
-  return Number(vol.toFixed(2))
-})
-
-async function saveVehicle() {
-  isSavingVehicle.value = true
-  try {
-    await $fetch('/api/admin/settings/vehicle', { method: 'POST', body: vehicle.value })
-    alert('Kapaciteti vozila uspješno su spremljeni u bazu!')
-  } catch (err) {
-    alert('Dogodila se greška prilikom spremanja vozila.')
-  } finally {
-    isSavingVehicle.value = false
+  const vd = vehicleData.value.data
+  fleet.value = {
+    vehicles: vd.vehicles || [],
+    assignments: vd.assignments || {},
+    inactiveDates: vd.inactiveDates || []
+  }
+  if (fleet.value.vehicles.length === 0 && vd.length) {
+    fleet.value.vehicles.push({
+      id: 'v1', name: 'Glavno vozilo',
+      length: vd.length, width: vd.width, height: vd.height, maxWeight: vd.maxWeight
+    })
   }
 }
 
-// --- 3. LOGIKA ZA POSTAVKE CJENIKA ---
+if (!fleet.value.vehicles) fleet.value.vehicles = []
+if (!fleet.value.assignments) fleet.value.assignments = {}
+if (!fleet.value.inactiveDates) fleet.value.inactiveDates = []
+
+function addVehicle() {
+  fleet.value.vehicles.push({
+    id: 'v_' + Date.now(), name: 'Novo vozilo', length: 200, width: 110, height: 90, maxWeight: 500
+  })
+}
+
+function removeVehicle(index: number) { fleet.value.vehicles.splice(index, 1) }
+
+async function saveFleet() {
+  isSavingFleet.value = true
+  try {
+    await $fetch('/api/admin/settings/vehicle', { method: 'POST', body: fleet.value })
+    alert('Raspored voznog parka uspješno je spremljen!')
+  } catch (err) {
+    alert('Dogodila se greška prilikom spremanja voznog parka.')
+  } finally {
+    isSavingFleet.value = false
+  }
+}
+
+const assignDate = ref(new Date().toISOString().split('T')[0])
+const assignVehicleId = ref('')
+
+const isAssignDateInactive = computed(() => {
+  return fleet.value.inactiveDates.includes(assignDate.value)
+})
+
+function assignVehicleToDate() {
+  if (!assignDate.value || !assignVehicleId.value) return
+  fleet.value.assignments[assignDate.value] = assignVehicleId.value
+  saveFleet()
+}
+
+function toggleInactiveDate() {
+  if (!assignDate.value) return
+  const idx = fleet.value.inactiveDates.indexOf(assignDate.value)
+  if (idx === -1) {
+    fleet.value.inactiveDates.push(assignDate.value)
+    delete fleet.value.assignments[assignDate.value]
+  } else {
+    fleet.value.inactiveDates.splice(idx, 1)
+  }
+  saveFleet()
+}
+
+// --- 3. LOGIKA ZA CJENIK ---
 const pricing = ref({
-  basePrice: 5,
-  roomDeliverySurcharge: 25,
+  basePrice: 5, roomDeliverySurcharge: 25,
   weightTiers: [{ max: 15, add: 0 }, { max: 30, add: 5 }, { max: 100, add: 15 }, { max: 250, add: 25 }, { max: 99999, add: 40 }],
   volumeTiers: [{ max: 0.1, add: 0 }, { max: 0.5, add: 5 }, { max: 1.0, add: 15 }, { max: 99999, add: 25 }]
 })
@@ -74,19 +140,21 @@ const isSavingPricing = ref(false)
 
 const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
 if (pricingData.value?.success && pricingData.value?.data) {
-  pricing.value = pricingData.value.data
+  const pd = pricingData.value.data
+  pricing.value = {
+    basePrice: pd.basePrice || 5,
+    roomDeliverySurcharge: pd.roomDeliverySurcharge || 25,
+    weightTiers: pd.weightTiers || [],
+    volumeTiers: pd.volumeTiers || []
+  }
 }
 
 async function savePricing() {
   isSavingPricing.value = true
   try {
     await $fetch('/api/admin/settings/pricing', { method: 'POST', body: pricing.value })
-    alert('Cjenik je uspješno spremljen u bazu!')
-  } catch (err) {
-    alert('Dogodila se greška prilikom spremanja cjenika.')
-  } finally {
-    isSavingPricing.value = false
-  }
+    alert('Cjenik spremljen!')
+  } catch (err) { alert('Greška.') } finally { isSavingPricing.value = false }
 }
 
 function addWeightTier() { pricing.value.weightTiers.push({ max: 0, add: 0 }) }
@@ -94,31 +162,21 @@ function removeWeightTier(idx: number) { pricing.value.weightTiers.splice(idx, 1
 function addVolumeTier() { pricing.value.volumeTiers.push({ max: 0, add: 0 }) }
 function removeVolumeTier(idx: number) { pricing.value.volumeTiers.splice(idx, 1) }
 
-// --- 4. LOGIKA ZA KALENDAR ---
+// --- 4. KALENDAR ---
 const calendarDate = ref(new Date())
-
-const currentMonthName = computed(() => {
-  return calendarDate.value.toLocaleString('hr-HR', { month: 'long' })
-})
+const currentMonthName = computed(() => calendarDate.value.toLocaleString('hr-HR', { month: 'long' }))
 const currentYear = computed(() => calendarDate.value.getFullYear())
 
-function prevMonth() {
-  calendarDate.value = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth() - 1, 1)
-}
-
-function nextMonth() {
-  calendarDate.value = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth() + 1, 1)
-}
+function prevMonth() { calendarDate.value = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth() - 1, 1) }
+function nextMonth() { calendarDate.value = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth() + 1, 1) }
 
 const ordersByDate = computed(() => {
   const map = new Map<string, { count: number, volume: number }>()
-
   if (data.value && data.value.orders) {
     data.value.orders.forEach((o: any) => {
       if (o.delivery?.date && o.status !== 'OTKAZANO') {
         const dateStr = o.delivery.date.split('T')[0]
         const vol = o.transport?.totalVolume || 0
-
         const existing = map.get(dateStr) || { count: 0, volume: 0 }
         map.set(dateStr, { count: existing.count + 1, volume: existing.volume + vol })
       }
@@ -130,24 +188,28 @@ const ordersByDate = computed(() => {
 const calendarDays = computed(() => {
   const year = calendarDate.value.getFullYear()
   const month = calendarDate.value.getMonth()
-
   const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-
   const days = []
+
   for (let i = 0; i < firstDayIndex; i++) { days.push(null) }
   for (let i = 1; i <= daysInMonth; i++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
     const stats = ordersByDate.value.get(dateStr) || { count: 0, volume: 0 }
-    days.push({ day: i, dateStr, ...stats })
+
+    const isInactive = fleet.value.inactiveDates.includes(dateStr)
+    const assignedVid = fleet.value.assignments[dateStr]
+    const activeVehicle = fleet.value.vehicles.find(v => v.id === assignedVid) || fleet.value.vehicles[0]
+    const capacity = activeVehicle ? (activeVehicle.length * activeVehicle.width * activeVehicle.height) / 1000000 : 0
+
+    days.push({ day: i, dateStr, capacity, activeVehicleName: activeVehicle?.name, isInactive, ...stats })
   }
   return days
 })
 
-// --- 5. NOVA LOGIKA ZA MJESEČNI OVERVIEW (STATISTIKA) ---
-const selectedStatsMonth = ref(new Date().getMonth()) // Trenutni mjesec default
+// --- 5. ANALITIKA ---
+const selectedStatsMonth = ref(new Date().getMonth())
 const selectedStatsYear = ref(new Date().getFullYear())
-
 const monthsOptions = [
   { value: 0, label: 'Siječanj' }, { value: 1, label: 'Veljača' }, { value: 2, label: 'Ožujak' },
   { value: 3, label: 'Travanj' }, { value: 4, label: 'Svibanj' }, { value: 5, label: 'Lipanj' },
@@ -156,16 +218,11 @@ const monthsOptions = [
 ]
 
 const monthlyAnalytics = computed(() => {
-  let totalRevenue = 0
-  let completedCount = 0
-  let totalWeightCarried = 0
-
+  let totalRevenue = 0, completedCount = 0, totalWeightCarried = 0
   if (data.value && data.value.orders) {
     data.value.orders.forEach((o: any) => {
-      // Filtriramo samo uspješno isporučene narudžbe za odabrani mjesec i godinu
       if (o.status === 'DOSTAVLJENO' && o.delivery?.date) {
         const orderDate = new Date(o.delivery.date)
-
         if (orderDate.getMonth() === selectedStatsMonth.value && orderDate.getFullYear() === selectedStatsYear.value) {
           completedCount++
           totalRevenue += Number(o.transport?.price || 0)
@@ -174,209 +231,286 @@ const monthlyAnalytics = computed(() => {
       }
     })
   }
-
-  const averagePerOrder = completedCount > 0 ? (totalRevenue / completedCount).toFixed(2) : '0.00'
-
   return {
-    revenue: totalRevenue.toFixed(2),
-    count: completedCount,
-    weight: totalWeightCarried.toFixed(1),
-    average: averagePerOrder
+    revenue: totalRevenue.toFixed(2), count: completedCount, weight: totalWeightCarried.toFixed(1),
+    average: completedCount > 0 ? (totalRevenue / completedCount).toFixed(2) : '0.00'
   }
 })
+
+// --- 6. NAVIGACIJA PO STRANICI ---
+const currentTab = ref('narudzbe')
+
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8 font-sans">
+  <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black">
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-3xl font-black text-gray-900 tracking-tight">Nadzorna ploča</h1>
-        <p class="text-gray-500 mt-1">Pregled poslovanja, financijska analitika i kalendar kapaciteta.</p>
-      </div>
-      <UButton
-        icon="i-lucide-refresh-cw"
-        color="gray"
-        variant="solid"
-        class="shadow-sm font-bold"
-        @click="refresh"
-        :loading="pending"
-      >
-        Osvježi podatke
-      </UButton>
-    </div>
+    <!-- ZAJEDNIČKI HEADER -->
+    <AppHeader />
 
-    <UCard class="shadow-md border border-gray-200 overflow-hidden relative bg-gray-900 text-white">
-      <div class="absolute top-0 right-0 w-64 h-64 bg-blue-500 rounded-bl-full opacity-10 pointer-events-none"></div>
+    <!-- GLAVNI SADRŽAJ -->
+    <main class="flex-grow">
+      <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
 
-      <template #header>
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-bar-chart-3" class="w-6 h-6 text-yellow-400" />
-            <h2 class="font-black text-lg text-white">Poslovna analitika i promet</h2>
+        <!-- ZAGLAVLJE -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-gray-200 pb-6">
+          <div>
+            <h1 class="text-3xl font-black text-gray-900 tracking-tight">Nadzorna ploča</h1>
+            <p class="text-gray-500 mt-1 text-sm">Pratite promet, upravljajte isporukama i podešavajte aplikaciju.</p>
           </div>
-
-          <div class="flex items-center gap-2 text-black">
-            <select v-model="selectedStatsMonth" class="rounded-lg border border-gray-700 bg-white text-sm p-1.5 font-bold">
-              <option v-for="m in monthsOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
-            </select>
-            <select v-model="selectedStatsYear" class="rounded-lg border border-gray-700 bg-white text-sm p-1.5 font-bold">
-              <option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}.</option>
-            </select>
+          <div class="flex items-center gap-3 bg-gray-100 p-1.5 rounded-xl self-start md:self-auto">
+            <button @click="currentTab = 'narudzbe'" class="px-4 py-2 text-sm font-bold rounded-lg transition-all" :class="currentTab === 'narudzbe' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'">Narudžbe i Promet</button>
+            <button @click="currentTab = 'kalendar'" class="px-4 py-2 text-sm font-bold rounded-lg transition-all" :class="currentTab === 'kalendar' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'">Kalendar</button>
+            <button @click="currentTab = 'postavke'" class="px-4 py-2 text-sm font-bold rounded-lg transition-all" :class="currentTab === 'postavke' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'">Postavke sustava</button>
           </div>
         </div>
-      </template>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-6 p-2">
-        <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-4 text-center">
-          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Ukupna naplata</p>
-          <p class="text-3xl font-black text-yellow-400">{{ monthlyAnalytics.revenue }} €</p>
-          <p class="text-[10px] text-gray-500 mt-1">Samo status "Dostavljeno"</p>
+        <!-- ============================================== -->
+        <!-- TAB 1: NARUDŽBE I ANALITIKA                    -->
+        <!-- ============================================== -->
+        <div v-show="currentTab === 'narudzbe'" class="space-y-8 animate-fade-in">
+          <div class="flex justify-between items-center">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2"><UIcon name="i-lucide-bar-chart-3" class="w-6 h-6 text-yellow-500" /> Analitika poslovanja</h2>
+            <UButton icon="i-lucide-refresh-cw" color="gray" variant="soft" size="sm" class="font-bold" @click="refresh" :loading="pending">Osvježi podatke</UButton>
+          </div>
+
+          <UCard class="shadow-sm border border-gray-200 overflow-hidden relative bg-gray-900 text-white">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-blue-500 rounded-bl-full opacity-10 pointer-events-none"></div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 relative z-10">
+              <p class="text-gray-400 text-sm font-medium">Odaberite mjesec za pregled prometa:</p>
+              <div class="flex items-center gap-2 text-black">
+                <select v-model="selectedStatsMonth" class="rounded-lg border-0 bg-white text-sm p-1.5 font-bold shadow-sm focus:ring-2 focus:ring-yellow-500 outline-none"><option v-for="m in monthsOptions" :key="m.value" :value="m.value">{{ m.label }}</option></select>
+                <select v-model="selectedStatsYear" class="rounded-lg border-0 bg-white text-sm p-1.5 font-bold shadow-sm focus:ring-2 focus:ring-yellow-500 outline-none"><option v-for="y in [2025, 2026, 2027]" :key="y" :value="y">{{ y }}.</option></select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 relative z-10">
+              <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-5 text-center transition-transform hover:-translate-y-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Zarada</p>
+                <p class="text-3xl font-black text-yellow-400">{{ monthlyAnalytics.revenue }} €</p>
+              </div>
+              <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-5 text-center transition-transform hover:-translate-y-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Dostave</p>
+                <p class="text-3xl font-black text-emerald-400">{{ monthlyAnalytics.count }}</p>
+              </div>
+              <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-5 text-center transition-transform hover:-translate-y-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Prosjek</p>
+                <p class="text-3xl font-black text-sky-400">{{ monthlyAnalytics.average }} €</p>
+              </div>
+              <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-5 text-center transition-transform hover:-translate-y-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Težina robe</p>
+                <p class="text-3xl font-black text-purple-400">{{ monthlyAnalytics.weight }} kg</p>
+              </div>
+            </div>
+          </UCard>
+
+          <div class="bg-white shadow-sm border border-gray-200 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50/50 flex justify-between items-center">
+              <h2 class="font-bold text-lg text-gray-900 flex items-center gap-2"><UIcon name="i-lucide-list-ordered" class="text-gray-400 w-5 h-5"/> Registar narudžbi</h2>
+            </div>
+            <div v-if="pending" class="py-16 flex flex-col items-center justify-center text-gray-400"><UIcon name="i-lucide-loader-2" class="w-10 h-10 animate-spin mb-4" /><p class="font-medium">Dohvaćam narudžbe...</p></div>
+
+            <UTable v-else :columns="columns" :data="tableRows" class="w-full" :ui="{ th: { base: 'uppercase tracking-wider text-gray-500 font-bold bg-gray-50' }, td: { base: 'py-4' } }">
+              <template #id-cell="{ row }"><span class="font-mono text-gray-600 font-medium bg-gray-50 px-2 py-1 rounded border">{{ row.original.id }}</span></template>
+              <template #customer-cell="{ row }"><span class="font-bold text-gray-900">{{ row.original.customer }}</span></template>
+
+              <!-- RJEŠENJE ZA BOJE -->
+              <template #status-cell="{ row }">
+                <span v-if="row.original.status === 'NOVO'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-gray-100 text-gray-700">Novo</span>
+                <span v-else-if="row.original.status === 'U_OBRADI'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-yellow-100 text-yellow-800">U obradi</span>
+                <span v-else-if="row.original.status === 'NA_PUTU_DO_IKEA'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-blue-100 text-blue-800">Utovar</span>
+                <span v-else-if="row.original.status === 'PREUZETO'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-purple-100 text-purple-800">Preuzeto</span>
+                <span v-else-if="row.original.status === 'DOSTAVLJENO'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-green-100 text-green-800">Dostavljeno</span>
+                <span v-else-if="row.original.status === 'OTKAZANO'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-red-100 text-red-800">Otkazano</span>
+                <span v-else class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black tracking-wider uppercase bg-gray-100 text-gray-700">{{ row.original.status }}</span>
+              </template>
+
+              <template #actions-cell="{ row }"><div class="text-right"><UButton :to="`/admin/${row.original.rawId}`" color="black" variant="soft" size="xs" class="font-bold" trailing-icon="i-lucide-arrow-right">Detalji</UButton></div></template>
+            </UTable>
+          </div>
         </div>
 
-        <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-4 text-center">
-          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Odrađeno dostava</p>
-          <p class="text-3xl font-black text-emerald-400">{{ monthlyAnalytics.count }} kom</p>
-          <p class="text-[10px] text-gray-500 mt-1">Uspješno isporučeno</p>
-        </div>
+        <!-- ============================================== -->
+        <!-- TAB 2: KALENDAR I KAPACITETI                   -->
+        <!-- ============================================== -->
+        <div v-show="currentTab === 'kalendar'" class="space-y-6 animate-fade-in">
 
-        <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-4 text-center">
-          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Prosjek po dostavi</p>
-          <p class="text-3xl font-black text-sky-400">{{ monthlyAnalytics.average }} €</p>
-          <p class="text-[10px] text-gray-500 mt-1">Zarada po klijentu</p>
-        </div>
-
-        <div class="bg-gray-800/60 border border-gray-700 rounded-2xl p-4 text-center">
-          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Prenesena težina</p>
-          <p class="text-3xl font-black text-purple-400">{{ monthlyAnalytics.weight }} kg</p>
-          <p class="text-[10px] text-gray-500 mt-1">Ukupna tonaža robe</p>
-        </div>
-      </div>
-    </UCard>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <UCard class="shadow-sm border border-gray-200 flex flex-col h-full">
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-truck" class="w-6 h-6 text-gray-900" />
-            <h2 class="font-bold text-lg text-gray-900">Kapaciteti dostavnog vozila</h2>
-          </div>
-        </template>
-        <form @submit.prevent="saveVehicle" class="flex-1 flex flex-col">
-          <div class="grid grid-cols-2 gap-4 flex-1">
-            <UFormField label="Maks. Dužina (cm)"><UInput v-model="vehicle.length" type="number" icon="i-lucide-ruler" class="w-full" /></UFormField>
-            <UFormField label="Maks. Širina (cm)"><UInput v-model="vehicle.width" type="number" icon="i-lucide-ruler" class="w-full" /></UFormField>
-            <UFormField label="Maks. Visina (cm)"><UInput v-model="vehicle.height" type="number" icon="i-lucide-ruler" class="w-full" /></UFormField>
-            <UFormField label="Nosivost (kg)"><UInput v-model="vehicle.maxWeight" type="number" icon="i-lucide-weight" class="w-full" /></UFormField>
-          </div>
-          <div class="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between gap-4">
-            <div class="text-xs text-gray-500">Volumen: <UBadge color="gray" variant="solid" class="font-bold ml-1">{{ vehicleVolume }} m³</UBadge></div>
-            <UButton type="submit" color="black" icon="i-lucide-save" :loading="isSavingVehicle" class="font-bold">Spremi vozilo</UButton>
-          </div>
-        </form>
-      </UCard>
-
-      <UCard class="shadow-sm border border-gray-200 flex flex-col h-full">
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-calculator" class="w-6 h-6 text-gray-900" />
-            <h2 class="font-bold text-lg text-gray-900">Cjenik dostave</h2>
-          </div>
-        </template>
-        <form @submit.prevent="savePricing" class="flex-1 flex flex-col">
-          <div class="grid grid-cols-2 gap-4 bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 mb-6">
-            <UFormField label="Osnovna cijena starta (€)"><UInput v-model="pricing.basePrice" type="number" step="0.1" icon="i-lucide-coins" class="w-full bg-white" /></UFormField>
-            <UFormField label="Nadoplata za unos u prostor (€)"><UInput v-model="pricing.roomDeliverySurcharge" type="number" step="0.1" icon="i-lucide-arrow-up-circle" class="w-full bg-white" /></UFormField>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+          <!-- KONTROLNA PLOČA KALENDARA -->
+          <div class="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
-              <div class="flex items-center justify-between mb-3 border-b pb-2"><span class="font-bold text-sm text-gray-700">Tijers po težini</span><UButton size="xs" color="gray" variant="soft" icon="i-lucide-plus" @click="addWeightTier">Dodaj</UButton></div>
-              <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
-                <div v-for="(tier, idx) in pricing.weightTiers" :key="'w'+idx" class="flex items-end gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  <UFormField label="Do (kg)" class="flex-1"><UInput v-model="tier.max" type="number" step="0.1" size="sm" class="w-full" /></UFormField>
-                  <UFormField label="Cijena (€)" class="flex-1"><UInput v-model="tier.add" type="number" step="0.1" size="sm" class="w-full" /></UFormField>
-                  <UButton color="red" variant="soft" icon="i-lucide-trash" size="sm" class="mb-1 shrink-0" @click="removeWeightTier(idx)" />
-                </div>
-              </div>
+              <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2 mb-2"><UIcon name="i-lucide-calendar-days" class="w-6 h-6 text-blue-500" /> Upravljanje danima</h2>
+              <p class="text-sm text-gray-500 max-w-md">Odaberite datum kako biste mu dodijelili specifično vozilo iz voznog parka ili ga proglasili neradnim danom.</p>
             </div>
-            <div>
-              <div class="flex items-center justify-between mb-3 border-b pb-2"><span class="font-bold text-sm text-gray-700">Tijers po volumenu</span><UButton size="xs" color="gray" variant="soft" icon="i-lucide-plus" @click="addVolumeTier">Dodaj</UButton></div>
-              <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
-                <div v-for="(tier, idx) in pricing.volumeTiers" :key="'v'+idx" class="flex items-end gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  <UFormField label="Do (m³)" class="flex-1"><UInput v-model="tier.max" type="number" step="0.1" size="sm" class="w-full" /></UFormField>
-                  <UFormField label="Cijena (€)" class="flex-1"><UInput v-model="tier.add" type="number" step="0.1" size="sm" class="w-full" /></UFormField>
-                  <UButton color="red" variant="soft" icon="i-lucide-trash" size="sm" class="mb-1 shrink-0" @click="removeVolumeTier(idx)" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="mt-6 pt-4 border-t border-gray-100 flex justify-end"><UButton type="submit" color="black" icon="i-lucide-save" :loading="isSavingPricing" class="font-bold">Spremi cjenik</UButton></div>
-        </form>
-      </UCard>
-    </div>
 
-    <UCard class="shadow-md border border-gray-200 mt-8">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-calendar-days" class="w-6 h-6 text-blue-600" />
-            <h2 class="font-black text-lg text-gray-900">Kalendar kapaciteta</h2>
+            <div class="flex flex-wrap items-end gap-3 bg-gray-50 border border-gray-200 p-3 rounded-xl">
+              <UFormField label="Datum:">
+                <UInput type="date" v-model="assignDate" size="sm" class="w-40 bg-white" />
+              </UFormField>
+
+              <div v-if="!isAssignDateInactive" class="flex items-end gap-2 border-l border-gray-200 pl-3">
+                <UFormField label="Kombi za ovaj dan:">
+                  <select v-model="assignVehicleId" class="w-40 rounded-md border border-gray-300 shadow-sm text-sm px-2 py-1.5 bg-white">
+                    <option value="" disabled>Odaberite...</option>
+                    <option v-for="v in fleet.vehicles" :key="v.id" :value="v.id">{{ v.name }}</option>
+                  </select>
+                </UFormField>
+                <UButton color="black" icon="i-lucide-check" size="sm" class="mb-0.5 font-bold" @click="assignVehicleToDate">Spremi</UButton>
+              </div>
+
+              <div class="h-8 w-px bg-gray-200 mx-2 hidden sm:block"></div>
+
+              <UButton
+                :color="isAssignDateInactive ? 'green' : 'red'"
+                variant="soft"
+                :icon="isAssignDateInactive ? 'i-lucide-calendar-check' : 'i-lucide-ban'"
+                size="sm"
+                class="mb-0.5 font-bold"
+                @click="toggleInactiveDate"
+              >
+                {{ isAssignDateInactive ? 'Aktiviraj dan' : 'Proglasi neradnim' }}
+              </UButton>
+            </div>
           </div>
-          <div class="flex items-center gap-4">
-            <UButton icon="i-lucide-chevron-left" color="gray" variant="soft" size="sm" @click="prevMonth" />
-            <span class="font-bold text-gray-800 capitalize w-32 text-center">{{ currentMonthName }} {{ currentYear }}</span>
-            <UButton icon="i-lucide-chevron-right" color="gray" variant="soft" size="sm" @click="nextMonth" />
-          </div>
+
+          <!-- SAM KALENDAR -->
+          <UCard class="shadow-sm border border-gray-200">
+            <template #header>
+              <div class="flex justify-between items-center">
+                <UButton icon="i-lucide-chevron-left" color="gray" variant="ghost" size="lg" @click="prevMonth" />
+                <span class="text-xl font-black text-gray-900 capitalize">{{ currentMonthName }} {{ currentYear }}</span>
+                <UButton icon="i-lucide-chevron-right" color="gray" variant="ghost" size="lg" @click="nextMonth" />
+              </div>
+            </template>
+
+            <div class="grid grid-cols-7 gap-2 mb-3">
+              <div v-for="d in ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sub', 'Ned']" :key="d" class="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ d }}</div>
+            </div>
+
+            <div class="grid grid-cols-7 gap-2 lg:gap-3">
+              <div v-for="(day, index) in calendarDays" :key="index" class="rounded-xl min-h-[120px] p-2 flex flex-col transition-all relative overflow-hidden"
+                   :class="day ? (day.isInactive ? 'bg-red-50/50 border border-red-200' : 'bg-white border border-gray-200 shadow-sm hover:border-blue-300 hover:shadow-md cursor-pointer') : 'bg-transparent'">
+
+                <template v-if="day">
+
+                  <!-- OVERLAY ZA NERADNI DAN -->
+                  <div v-if="day.isInactive" class="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden">
+                    <div class="bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgNDBsNDAtNDBIMzBMMCAzMHYxMHptNDAgMEwwIDBoMTBMMDAgMzB2MTB6IiBmaWxsPSIjZmVmMmYyIiBmaWxsLW9wYWNpdHk9IjAuNCIgZmlsbC1ydWxlPSJldmVub2RkIi8+PC9zdmc+')] absolute inset-0 opacity-50"></div>
+                    <span class="text-red-500 font-black text-[10px] border border-red-200 bg-white px-2 py-1 rounded shadow-sm z-10 tracking-widest text-center">NERADNI</span>
+                  </div>
+
+                  <!-- ZAGLAVLJE DANA -->
+                  <div class="flex justify-between items-start mb-1 relative z-10" @click="assignDate = day.dateStr">
+                    <div class="text-sm font-black" :class="day.isInactive ? 'text-red-400' : (day.count > 0 ? 'text-gray-900' : 'text-gray-400')">{{ day.day }}</div>
+                    <div v-if="day.activeVehicleName && !day.isInactive" class="text-[9px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded uppercase tracking-wider truncate max-w-[70px]" :title="day.activeVehicleName">
+                      {{ day.activeVehicleName }}
+                    </div>
+                  </div>
+
+                  <!-- TIJELO DANA S METRIKAMA -->
+                  <div v-if="day.count > 0 && !day.isInactive" class="flex-1 flex flex-col justify-end gap-2 mt-2 relative z-10">
+                    <UBadge color="black" variant="subtle" size="xs" class="justify-center font-bold">{{ day.count }} isporuka</UBadge>
+                    <div>
+                      <div class="flex justify-between text-[10px] font-bold text-gray-500 mb-1 px-0.5">
+                        <span>{{ day.volume.toFixed(2) }} m³</span>
+                        <span v-if="day.capacity > 0">{{ Math.round((day.volume / day.capacity) * 100) }}%</span>
+                      </div>
+                      <div v-if="day.capacity > 0" class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                        <div class="h-full transition-all duration-500" :class="day.volume > day.capacity ? 'bg-red-500' : (day.volume >= day.capacity * 0.8 ? 'bg-yellow-500' : 'bg-green-500')" :style="{ width: Math.min((day.volume / day.capacity) * 100, 100) + '%' }"></div>
+                      </div>
+                      <div v-if="day.volume > day.capacity" class="text-[9px] font-bold text-red-500 mt-1 text-center bg-red-50 rounded">Prebukirano!</div>
+                    </div>
+                  </div>
+                </template>
+
+              </div>
+            </div>
+          </UCard>
         </div>
-      </template>
-      <div class="grid grid-cols-7 gap-2 mb-2">
-        <div v-for="d in ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sub', 'Ned']" :key="d" class="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ d }}</div>
-      </div>
-      <div class="grid grid-cols-7 gap-2">
-        <div v-for="(day, index) in calendarDays" :key="index" class="border rounded-xl min-h-[100px] p-2 flex flex-col transition-all" :class="day ? 'bg-white border-gray-200 hover:border-gray-300 shadow-sm' : 'bg-gray-50/50 border-transparent'">
-          <template v-if="day">
-            <div class="text-xs font-black text-gray-400 mb-1" :class="{'text-gray-900': day.count > 0}">{{ day.day }}</div>
-            <div v-if="day.count > 0" class="flex-1 flex flex-col justify-end gap-1.5 mt-2 animate-fade-in">
-              <UBadge color="black" variant="soft" size="xs" class="justify-center font-bold">{{ day.count }} {{ day.count === 1 ? 'narudžba' : 'narudžbe' }}</UBadge>
-              <div class="mt-1">
-                <div class="flex justify-between text-[9px] font-bold text-gray-500 mb-1 px-0.5"><span>{{ day.volume.toFixed(2) }} m³</span><span v-if="vehicleVolume > 0">{{ Math.round((day.volume / vehicleVolume) * 100) }}%</span></div>
-                <div v-if="vehicleVolume > 0" class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <div class="h-full transition-all duration-500" :class="day.volume > vehicleVolume ? 'bg-red-500' : (day.volume >= vehicleVolume * 0.8 ? 'bg-yellow-500' : 'bg-green-500')" :style="{ width: Math.min((day.volume / vehicleVolume) * 100, 100) + '%' }"></div>
-                </div>
-                <div v-if="day.volume > vehicleVolume" class="text-[9px] font-bold text-red-500 mt-1 text-center">Prebukirano!</div>
+
+        <!-- ============================================== -->
+        <!-- TAB 3: POSTAVKE SUSTAVA (Vozila i Cjenik)      -->
+        <!-- ============================================== -->
+        <div v-show="currentTab === 'postavke'" class="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
+
+          <!-- VOZILA -->
+          <UCard class="shadow-sm border border-gray-200 flex flex-col h-full bg-white">
+            <template #header>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2"><UIcon name="i-lucide-truck" class="w-6 h-6 text-gray-900" /><h2 class="font-bold text-lg text-gray-900">Vozni park</h2></div>
+                <UButton size="sm" color="black" variant="soft" icon="i-lucide-plus" @click="addVehicle" class="font-bold">Dodaj vozilo</UButton>
               </div>
-            </div>
-            <div v-else class="flex-1 flex items-center justify-center opacity-30"><UIcon name="i-lucide-calendar-x" class="w-4 h-4 text-gray-300" /></div>
-          </template>
+            </template>
+            <form @submit.prevent="saveFleet" class="flex-1 flex flex-col">
+              <p class="text-sm text-gray-500 mb-4">Ovdje dodajte sva vozila kojima raspolažete. Kapaciteti se automatski računaju.</p>
+              <div class="space-y-4 flex-1 max-h-[500px] overflow-y-auto pr-2">
+                <div v-for="(v, index) in fleet.vehicles" :key="v.id" class="bg-gray-50 border border-gray-200 p-5 rounded-2xl relative hover:border-blue-200 transition-colors">
+                  <div class="absolute top-3 right-3"><UButton color="red" variant="ghost" icon="i-lucide-trash-2" size="sm" @click="removeVehicle(index)" /></div>
+                  <UFormField label="Naziv vozila" class="mb-4 pr-10"><UInput v-model="v.name" placeholder="Npr. Iveco Daily" class="w-full font-bold" size="lg" /></UFormField>
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <UFormField label="Dužina (cm)"><UInput v-model="v.length" type="number" class="w-full bg-white" /></UFormField>
+                    <UFormField label="Širina (cm)"><UInput v-model="v.width" type="number" class="w-full bg-white" /></UFormField>
+                    <UFormField label="Visina (cm)"><UInput v-model="v.height" type="number" class="w-full bg-white" /></UFormField>
+                    <UFormField label="Nosivost (kg)"><UInput v-model="v.maxWeight" type="number" class="w-full bg-white" /></UFormField>
+                  </div>
+                  <div class="mt-3 pt-3 border-t border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-500 flex justify-between items-center">
+                    <span>Ukupni volumen vozila:</span>
+                    <span class="text-blue-600 text-sm bg-blue-50 px-2 py-1 rounded">{{ ((v.length * v.width * v.height) / 1000000).toFixed(2) }} m³</span>
+                  </div>
+                </div>
+                <div v-if="fleet.vehicles.length === 0" class="text-center py-10 bg-gray-50 rounded-2xl border border-dashed border-gray-300 text-gray-400">Nema dodanih vozila u floti.</div>
+              </div>
+              <div class="mt-6 pt-4 border-t border-gray-100 flex justify-end"><UButton type="submit" color="black" size="lg" icon="i-lucide-save" :loading="isSavingFleet" class="font-bold">Spremi promjene u floti</UButton></div>
+            </form>
+          </UCard>
+
+          <!-- CJENIK -->
+          <UCard class="shadow-sm border border-gray-200 flex flex-col h-full bg-white">
+            <template #header>
+              <div class="flex items-center gap-2"><UIcon name="i-lucide-calculator" class="w-6 h-6 text-gray-900" /><h2 class="font-bold text-lg text-gray-900">Pravila naplate i Cjenik</h2></div>
+            </template>
+            <form @submit.prevent="savePricing" class="flex-1 flex flex-col">
+              <p class="text-sm text-gray-500 mb-4">Cijena se formira zbrajanjem osnovne cijene s najvećom prijeđenom stepenicom za težinu i volumen.</p>
+
+              <div class="grid grid-cols-2 gap-4 bg-yellow-50 p-5 rounded-2xl border border-yellow-200 mb-6">
+                <UFormField label="Osnovna cijena starta (€)"><UInput v-model="pricing.basePrice" type="number" step="0.1" icon="i-lucide-coins" size="lg" class="w-full bg-white font-bold" /></UFormField>
+                <UFormField label="Fiksni dodatak za unos (€)"><UInput v-model="pricing.roomDeliverySurcharge" type="number" step="0.1" icon="i-lucide-arrow-up-circle" size="lg" class="w-full bg-white font-bold" /></UFormField>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1">
+                <div>
+                  <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2"><span class="font-bold text-gray-700 flex items-center gap-2"><UIcon name="i-lucide-scale" class="text-gray-400"/> Stepenice po težini</span><UButton size="xs" color="black" variant="soft" icon="i-lucide-plus" @click="addWeightTier">Dodaj</UButton></div>
+                  <div class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                    <div v-for="(tier, idx) in pricing.weightTiers" :key="'w'+idx" class="flex items-end gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                      <UFormField label="Do težine (kg)" class="flex-1"><UInput v-model="tier.max" type="number" step="0.1" class="w-full bg-white" /></UFormField>
+                      <UFormField label="Dodaj cijeni (€)" class="flex-1"><UInput v-model="tier.add" type="number" step="0.1" class="w-full bg-white font-bold text-blue-700" /></UFormField>
+                      <UButton color="red" variant="soft" icon="i-lucide-trash" size="sm" class="mb-1 shrink-0" @click="removeWeightTier(idx)" />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2"><span class="font-bold text-gray-700 flex items-center gap-2"><UIcon name="i-lucide-box" class="text-gray-400"/> Stepenice po volumenu</span><UButton size="xs" color="black" variant="soft" icon="i-lucide-plus" @click="addVolumeTier">Dodaj</UButton></div>
+                  <div class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                    <div v-for="(tier, idx) in pricing.volumeTiers" :key="'v'+idx" class="flex items-end gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                      <UFormField label="Do volumena (m³)" class="flex-1"><UInput v-model="tier.max" type="number" step="0.1" class="w-full bg-white" /></UFormField>
+                      <UFormField label="Dodaj cijeni (€)" class="flex-1"><UInput v-model="tier.add" type="number" step="0.1" class="w-full bg-white font-bold text-blue-700" /></UFormField>
+                      <UButton color="red" variant="soft" icon="i-lucide-trash" size="sm" class="mb-1 shrink-0" @click="removeVolumeTier(idx)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-6 pt-4 border-t border-gray-100 flex justify-end"><UButton type="submit" color="black" size="lg" icon="i-lucide-save" :loading="isSavingPricing" class="font-bold">Spremi cjenik</UButton></div>
+            </form>
+          </UCard>
+
         </div>
       </div>
-    </UCard>
+    </main>
 
-    <UCard class="shadow-md overflow-hidden border border-gray-200 mt-8">
-      <div v-if="pending" class="py-16 flex flex-col items-center justify-center text-gray-400"><UIcon name="i-lucide-loader-2" class="w-10 h-10 animate-spin mb-4" /><p class="font-medium text-lg">Učitavanje narudžbi...</p></div>
-      <div v-else-if="error" class="py-16 flex flex-col items-center justify-center text-red-500"><UIcon name="i-lucide-alert-circle" class="w-10 h-10 mb-4" /><p class="font-bold text-lg">Dogodila se greška prilikom učitavanja podataka.</p><p class="text-sm mt-2 text-red-400">{{ error.message }}</p></div>
-      <div v-else-if="tableRows.length === 0" class="py-16 flex flex-col items-center justify-center text-gray-400"><UIcon name="i-lucide-inbox" class="w-10 h-10 mb-4 opacity-50" /><p class="font-medium text-lg">Trenutno nema zaprimljenih narudžbi.</p></div>
-
-      <UTable v-else :columns="columns" :data="tableRows" class="w-full" :ui="{ th: { base: 'uppercase tracking-wider text-gray-500 font-bold' } }">
-        <template #id-cell="{ row }"><span class="font-mono text-gray-600 font-medium bg-gray-50 px-2 py-1 rounded border">{{ row.original.id }}</span></template>
-        <template #customer-cell="{ row }"><span class="font-bold text-gray-900">{{ row.original.customer }}</span></template>
-        <template #status-cell="{ row }">
-          <UBadge :color="row.original.status === 'NOVO' ? 'green' : (row.original.status === 'DOSTAVLJENO' ? 'gray' : 'yellow')" variant="soft" class="font-black tracking-wide">{{ row.original.status }}</UBadge>
-        </template>
-        <template #actions-cell="{ row }">
-          <div class="text-right">
-            <UButton :to="`/admin/${row.original.rawId}`" color="black" variant="soft" size="xs" class="font-bold" trailing-icon="i-lucide-arrow-right">Detalji</UButton>
-          </div>
-        </template>
-      </UTable>
-    </UCard>
+    <!-- ZAJEDNIČKI FOOTER -->
+    <AppFooter />
   </div>
 </template>
 
 <style scoped>
-.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.animate-fade-in { animation: fadeIn 0.25s ease-out forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>

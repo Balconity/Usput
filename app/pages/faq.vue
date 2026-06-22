@@ -41,16 +41,7 @@ const faqItems = [
 <template>
   <div class="min-h-screen bg-gray-50 font-sans text-neutral-900 pb-20">
 
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm w-full">
-      <div class="w-full max-w-[1400px] mx-auto flex items-center justify-between py-4 px-4 sm:px-6 lg:px-8">
-        <NuxtLink to="/" class="flex items-center gap-2 text-xl font-bold hover:opacity-80 transition-opacity">
-          <span>Usput<span class="text-yellow-500">.</span></span>
-        </NuxtLink>
-        <UButton color="gray" variant="ghost" to="/login" class="font-bold">
-          Moj profil
-        </UButton>
-      </div>
-    </header>
+    <AppHeader/>
 
     <main class="pt-12 px-4 sm:px-6 lg:px-8">
       <div class="w-full max-w-[1000px] mx-auto">

@@ -1,31 +1,52 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
+
 const colorMode = useColorMode()
 colorMode.preference = 'light'
 
 const appConfig = useAppConfig()
 appConfig.ui.primary = 'yellow'
 appConfig.ui.gray = 'neutral'
+
+// --- DINAMIČKO DOHVAĆANJE CIJENA IZ BAZE ---
+const pricing = ref({
+  basePrice: 5,
+  roomDeliverySurcharge: 25,
+  weightTiers: [
+    { max: 15, add: 0 },
+    { max: 30, add: 5 },
+    { max: 100, add: 15 },
+    { max: 250, add: 25 },
+    { max: 99999, add: 40 }
+  ],
+  volumeTiers: [
+    { max: 0.1, add: 0 },
+    { max: 0.5, add: 5 },
+    { max: 1.0, add: 15 },
+    { max: 99999, add: 25 }
+  ]
+})
+
+// Pokušaj dohvata pravih cijena s backenda
+const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
+
+if (pricingData.value?.success && pricingData.value?.data) {
+  pricing.value = pricingData.value.data
+}
+
+// Izračun cijena za prikaz na karticama
+const priceSmall = computed(() => pricing.value.basePrice + (pricing.value.weightTiers[0]?.add || 0))
+const priceMedium = computed(() => pricing.value.basePrice + (pricing.value.weightTiers[1]?.add || 5))
+const priceLarge = computed(() => pricing.value.basePrice + (pricing.value.weightTiers[3]?.add || 25))
+const surchargeRoom = computed(() => pricing.value.roomDeliverySurcharge)
+
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black scroll-smooth">
-
-    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
-      <UContainer class="flex items-center justify-between py-4">
-        <div class="flex items-center gap-2 text-xl font-bold">
-          <span>Usput<span class="text-yellow-500">.</span></span>
-        </div>
-        <div class="flex items-center gap-4">
-          <NuxtLink to="/admin/login" class="text-sm font-bold text-gray-600 hover:text-yellow-500 transition-colors">
-            Prijava
-          </NuxtLink>
-          <UButton color="warning" variant="solid" label="Provjeri i naruči" icon="i-lucide-arrow-right" trailing to="#calculator" class="font-bold text-black" />
-        </div>
-      </UContainer>
-    </header>
+    <AppHeader/>
 
     <main class="flex-grow">
-      <!-- HERO SEKCIJA I GLAVNI WIZARD -->
       <section id="calculator" class="relative pt-12 pb-20 lg:pt-24 lg:pb-32 bg-gray-50">
         <div class="absolute inset-0 overflow-hidden pointer-events-none z-0">
           <div class="absolute top-0 right-0 -mr-20 -mt-20 w-[600px] h-[600px] bg-yellow-400/20 rounded-full blur-3xl"></div>
@@ -70,7 +91,6 @@ appConfig.ui.gray = 'neutral'
         </UContainer>
       </section>
 
-      <!-- KAKO FUNKCIONIRA -->
       <section id="how-it-works" class="py-20 bg-white border-y border-gray-200 relative z-20">
         <UContainer>
           <div class="text-center max-w-3xl mx-auto mb-16">
@@ -120,7 +140,6 @@ appConfig.ui.gray = 'neutral'
         </UContainer>
       </section>
 
-      <!-- CJENIK (AŽURIRAN PREMA KATEGORIJAMA) -->
       <section id="pricing" class="py-20 bg-gray-900 text-white border-y border-gray-800 relative z-20 overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-yellow-500/10 via-gray-900 to-gray-900 pointer-events-none"></div>
         <UContainer class="relative z-10">
@@ -130,46 +149,41 @@ appConfig.ui.gray = 'neutral'
           </div>
 
           <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- Kategorija 1 -->
             <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 flex flex-col relative overflow-hidden">
               <div class="mb-4 bg-gray-700/50 w-12 h-12 rounded-lg flex items-center justify-center"><UIcon name="i-lucide-package" class="w-6 h-6 text-yellow-400" /></div>
               <h3 class="text-xl font-bold mb-1">Standardni paket</h3>
               <p class="text-sm text-gray-400 mb-4 flex-grow">Za manje narudžbe, sitnice, posuđe i tekstil do 15 kg. <br><br><em class="text-gray-500 line-through">IKEA naplaćuje: od 6,99 €</em></p>
-              <p class="text-3xl font-black text-white">5 €</p>
+              <p class="text-3xl font-black text-white">{{ priceSmall }} €</p>
             </div>
 
-            <!-- Kategorija 2 -->
             <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 flex flex-col">
               <div class="mb-4 bg-gray-700/50 w-12 h-12 rounded-lg flex items-center justify-center"><UIcon name="i-lucide-boxes" class="w-6 h-6 text-yellow-400" /></div>
               <h3 class="text-xl font-bold mb-1">Veliki paket</h3>
               <p class="text-sm text-gray-400 mb-4 flex-grow">Za srednje pakete, manje police, stolice i rasvjetu do 30 kg. Kod nas nema naglih skokova cijene!</p>
-              <p class="text-3xl font-black text-white">10 €</p>
+              <p class="text-3xl font-black text-white">{{ priceMedium }} €</p>
             </div>
 
-            <!-- Kategorija 3 -->
             <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 flex flex-col">
               <div class="mb-4 bg-gray-700/50 w-12 h-12 rounded-lg flex items-center justify-center"><UIcon name="i-lucide-sofa" class="w-6 h-6 text-yellow-400" /></div>
               <h3 class="text-xl font-bold mb-1">Namještaj</h3>
               <p class="text-sm text-gray-400 mb-4 flex-grow">Za veće i teže komade namještaja poput ormara i kreveta. Točna cijena se računa u aplikaciji. <br><br><em class="text-gray-500 line-through">IKEA naplaćuje: od 54,99 €</em></p>
               <div class="flex items-baseline gap-1">
                 <span class="text-lg text-gray-400 font-bold">od</span>
-                <p class="text-3xl font-black text-white">30 €</p>
+                <p class="text-3xl font-black text-white">{{ priceLarge }} €</p>
               </div>
             </div>
 
-            <!-- Unos -->
             <div class="bg-yellow-400 text-gray-900 rounded-2xl p-6 border border-yellow-500 flex flex-col relative overflow-hidden">
               <div class="absolute -right-4 -bottom-4 opacity-10"><UIcon name="i-lucide-home" class="w-32 h-32" /></div>
               <div class="mb-4 bg-yellow-300/50 w-12 h-12 rounded-lg flex items-center justify-center relative z-10"><UIcon name="i-lucide-arrow-up-circle" class="w-6 h-6 text-gray-900" /></div>
               <h3 class="text-xl font-bold mb-1 relative z-10">Unos u prostoriju</h3>
               <p class="text-sm text-gray-800 mb-4 flex-grow relative z-10"><strong>Jedina moguća doplata.</strong> Pokriva trošak još jedne osobe za nošenje teških komada u vaš dom.<br><br><em class="opacity-70 line-through">IKEA naplaćuje: 89,99 € - 119,99 €</em></p>
-              <p class="text-3xl font-black relative z-10">+ 25 €</p>
+              <p class="text-3xl font-black relative z-10">+ {{ surchargeRoom }} €</p>
             </div>
           </div>
         </UContainer>
       </section>
 
-      <!-- LOGISTIKA -->
       <section id="services" class="py-20 bg-gray-50 border-b border-gray-200">
         <UContainer>
           <div class="text-center max-w-2xl mx-auto mb-16">
@@ -195,39 +209,6 @@ appConfig.ui.gray = 'neutral'
       </section>
     </main>
 
-    <!-- FOOTER -->
-    <footer class="bg-gray-100 py-12 border-t border-gray-200">
-      <UContainer class="flex flex-col md:flex-row justify-between items-center md:items-start gap-8">
-        <div class="flex flex-col items-center md:items-start gap-3">
-          <div class="text-xl font-bold opacity-60 grayscale">
-            <span>Usput<span class="text-yellow-500">.</span></span>
-          </div>
-          <div class="text-xs text-gray-400 max-w-sm text-center md:text-left leading-relaxed">
-            <p>"Usput" je komercijalni naziv usluge dostave.</p>
-            <p class="mt-1">
-              Uslugu pruža i naplaćuje obrt <strong>Balconity</strong>,
-              vl. Tomislav Levkuš, Ivanečka ulica 41, 42000 Varaždin, OIB: 82780381100.
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-col items-center md:items-end gap-3">
-          <p class="text-sm text-gray-500 font-medium">
-            &copy; {{ new Date().getFullYear() }} Usput. Sva prava pridržana.
-          </p>
-          <div class="flex items-center gap-4 text-xs text-gray-400 mt-2">
-            <a href="/terms-of-service" class="hover:text-gray-600 transition-colors">Uvjeti korištenja</a>
-            <span>|</span>
-            <a href="/privacy-policy" class="hover:text-gray-600 transition-colors">Politika privatnosti</a>
-          </div>
-          <p class="text-xs text-gray-400 mt-4 flex items-center gap-1.5">
-            Powered by
-            <a href="https://balconity.com" target="_blank" rel="noopener noreferrer" class="font-bold text-gray-500 hover:text-yellow-600 transition-colors flex items-center gap-1">
-              Balconity
-              <UIcon name="i-lucide-external-link" class="w-3 h-3" />
-            </a>
-          </p>
-        </div>
-      </UContainer>
-    </footer>
+    <AppFooter/>
   </div>
 </template>

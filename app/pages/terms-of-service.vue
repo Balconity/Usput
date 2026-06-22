@@ -9,13 +9,7 @@ useHead({
 
 <template>
   <div class="min-h-screen bg-gray-50 font-sans text-neutral-900 pb-20">
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
-      <UContainer class="flex items-center justify-between py-4 max-w-[1000px]">
-        <NuxtLink to="/" class="flex items-center gap-2 text-xl font-bold">
-          <span>Usput<span class="text-yellow-500">.</span></span>
-        </NuxtLink>
-      </UContainer>
-    </header>
+    <AppHeader/>
 
     <main class="pt-12">
       <UContainer class="max-w-[800px] bg-white p-8 md:p-12 rounded-3xl shadow-sm border border-gray-200">
