@@ -8,7 +8,22 @@ const appConfig = useAppConfig()
 appConfig.ui.primary = 'yellow'
 appConfig.ui.gray = 'neutral'
 
-// --- DINAMIČKO DOHVAĆANJE CIJENA IZ BAZE ---
+useHead({
+  title: 'Usput | Povoljna IKEA dostava Varaždin',
+  meta: [
+    { name: 'description', content: 'Pametnija i povoljnija dostava IKEA paketa i namještaja iz Zagreba za Varaždin i okolicu. Provjerite cijenu, rezervirajte termin i prepustite preuzimanje nama.' },
+    { name: 'keywords', content: 'IKEA dostava, dostava Zagreb Varaždin, preuzimanje paketomat, prijevoz namještaja, jeftina dostava, Usput dostava, dostava IKEA Varaždin' },
+    { property: 'og:type', content: 'website' },
+    { property: 'og:url', content: 'https://www.usput.hr/' },
+    { property: 'og:title', content: 'Usput | IKEA dostava Varaždin' },
+    { property: 'og:description', content: 'Zalijepite svoju IKEA košaricu i odmah saznajte cijenu. Preuzimamo pakete iz IKEA Paketomata i dostavljamo na Vaša vrata.' },
+    // Dodaj sliku ako je imaš: { property: 'og:image', content: 'https://www.usput.hr/og-image.jpg' }
+  ],
+  link: [
+    { rel: 'canonical', href: 'https://www.usput.hr/' }
+  ]
+})
+
 const pricing = ref({
   basePrice: 5,
   roomDeliverySurcharge: 25,
