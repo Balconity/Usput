@@ -30,6 +30,7 @@
     "@nuxt/eslint": "^1.15.2",
     "@types/nodemailer": "^8.0.1",
     "eslint": "^10.3.0",
+    "nuxt-gtag": "^4.1.0",
     "typescript": "^6.0.3",
     "vue-tsc": "^3.2.8"
   }

@@ -2,8 +2,13 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
-    'nuxt-security'
+    'nuxt-security',
+    'nuxt-gtag'
   ],
+
+  gtag: {
+    id: 'G-31ST09L4XZ'
+  },
 
   colorMode: {
     preference: 'light'
@@ -35,7 +40,6 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    // SPAM zaštita za naručivanje ostaje aktivna
     '/api/submit-order': {
       security: {
         rateLimiter: {
