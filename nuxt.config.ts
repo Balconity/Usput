@@ -6,6 +6,17 @@ export default defineNuxtConfig({
     'nuxt-gtag'
   ],
 
+  app: {
+    head: {
+      script: [
+        {
+          src: 'https://app.enzuzo.com/scripts/cookiebar/76fdb890-6f21-11f1-8f21-438dba3537d8',
+          defer: true
+        }
+      ]
+    }
+  },
+
   gtag: {
     id: 'G-31ST09L4XZ'
   },
