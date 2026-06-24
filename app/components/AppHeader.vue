@@ -25,19 +25,24 @@ async function handleLogout() {
   <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
     <UContainer class="flex items-center justify-between py-4">
 
-      <!-- LOGO -->
       <div class="flex items-center gap-2 text-xl font-bold">
         <NuxtLink to="/">
           <span>Usput<span class="text-yellow-500">.</span></span>
         </NuxtLink>
       </div>
 
-      <!-- NAVIGACIJA / KORISNIK -->
-      <div class="flex items-center gap-2 sm:gap-4">
+      <div class="flex items-center gap-3 sm:gap-5">
 
-        <!-- PRIKAZ KADA JE KORISNIK PRIJAVLJEN -->
+        <NuxtLink
+          to="/pricelist"
+          class="text-sm font-bold text-gray-600 hover:text-yellow-500 transition-colors"
+        >
+          Cjenik
+        </NuxtLink>
+
+        <div class="w-px h-5 bg-gray-200"></div>
+
         <template v-if="isAuthenticated">
-          <!-- Brzi link nazad na dashboard -->
           <NuxtLink
             to="/admin/dashboard"
             class="hidden sm:flex items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
@@ -45,7 +50,6 @@ async function handleLogout() {
             Nadzorna ploča
           </NuxtLink>
 
-          <!-- Gumb za odjavu -->
           <button
             @click="handleLogout"
             class="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-full flex items-center justify-center"
@@ -56,7 +60,6 @@ async function handleLogout() {
           </button>
         </template>
 
-        <!-- PRIKAZ KADA KORISNIK NIJE PRIJAVLJEN -->
         <template v-else>
           <NuxtLink
             to="/admin/login"

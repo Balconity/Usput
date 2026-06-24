@@ -3,12 +3,33 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const emit = defineEmits(['status-changed'])
 
-// --- KONFIGURACIJA CIJENA ---
-const pricingConfig = {
-  basePrice: 5, roomDeliverySurcharge: 25,
-  weightTiers: [{ max: 15, add: 0 }, { max: 30, add: 5 }, { max: 100, add: 15 }, { max: 250, add: 25 }, { max: Infinity, add: 40 }],
-  volumeTiers: [{ max: 0.1, add: 0 }, { max: 0.5, add: 5 }, { max: 1.0, add: 15 }, { max: Infinity, add: 25 }]
+// --- KONFIGURACIJA CIJENA (NOVI FIKSNI MODEL) ---
+const pricingConfig = ref({
+  standard: 3.99,
+  large: 6.99,
+  driveway100: 43.99,
+  room400: 95.20,
+  room600: 103.20,
+  room1000: 111.20,
+  room1400: 207.20,
+  roomOver1400: 250.00
+})
+
+const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
+if (pricingData.value?.success && pricingData.value?.data) {
+  const pd = pricingData.value.data
+  pricingConfig.value = {
+    standard: pd.standard ?? 3.99,
+    large: pd.large ?? 6.99,
+    driveway100: pd.driveway100 ?? 43.99,
+    room400: pd.room400 ?? 95.20,
+    room600: pd.room600 ?? 103.20,
+    room1000: pd.room1000 ?? 111.20,
+    room1400: pd.room1400 ?? 207.20,
+    roomOver1400: pd.roomOver1400 ?? 250.00
+  }
 }
+
 const contactConfig = { phone: '091 234 5678', email: 'contact@balconity.hr' }
 
 // --- 1. DOHVAĆANJE VOZNOG PARKA I ZAUZEĆA IZ BAZE ---
@@ -44,13 +65,12 @@ const inactiveDates = computed(() => fleet.value.inactiveDates || [])
 function getDefaultDate() {
   let date = new Date()
   let found = false
-  // Petlja traži prvi idući dan koji NIJE vikend i NIJE na popisu tvojih neradnih dana
   while (!found) {
     date.setDate(date.getDate() + 1)
-    if (date.getDay() === 0 || date.getDay() === 6) continue // Preskoči vikend
+    if (date.getDay() === 0 || date.getDay() === 6) continue
 
     const dateStr = date.toISOString().split('T')[0]
-    if (inactiveDates.value.includes(dateStr)) continue // Preskoči tvoj neradni dan
+    if (inactiveDates.value.includes(dateStr)) continue
 
     found = true
   }
@@ -164,6 +184,32 @@ onBeforeUnmount(() => {
   if (loadingInterval) clearInterval(loadingInterval); if (progressInterval) clearInterval(progressInterval); if (reservationInterval) clearInterval(reservationInterval)
 })
 
+// --- LOGIKA ZA TOČAN IZRAČUN PREMA NOVOM CJENIKU ---
+function calculatePrice(volume: number, weight: number, option: string) {
+  const p = pricingConfig.value
+
+  if (option === 'room') {
+    if (weight <= 400) return p.room400
+    if (weight <= 600) return p.room600
+    if (weight <= 1000) return p.room1000
+    if (weight <= 1400) return p.room1400
+    return p.roomOver1400
+  } else {
+    // Opcija "Kolni prilaz"
+    if (weight <= 14.99) return p.standard
+    if (weight <= 29.99) return p.large
+    if (weight <= 100) return p.driveway100
+
+    // Ako kupac odabere "Kolni prilaz", a ima preko 100 kg
+    // fall-backamo na cijene za unos u prostoriju jer se ta količina ne može voziti za 43.99€
+    if (weight <= 400) return p.room400
+    if (weight <= 600) return p.room600
+    if (weight <= 1000) return p.room1000
+    if (weight <= 1400) return p.room1400
+    return p.roomOver1400
+  }
+}
+
 function recalculatePrice() { deliveryPrice.value = calculatePrice(totalVolume.value, totalWeight.value, deliveryOption.value) }
 
 function startLoadingAnimation() {
@@ -179,14 +225,6 @@ function stopLoadingAnimation() {
 
 function resetCheck() {
   volumeResult.value = null; detectedItems.value = []; totalVolume.value = 0; totalWeight.value = 0; deliveryPrice.value = 0
-}
-
-function calculatePrice(volume: number, weight: number, option: string) {
-  let price = pricingConfig.basePrice
-  if (option === 'room') price += pricingConfig.roomDeliverySurcharge
-  for (const tier of pricingConfig.weightTiers) { if (weight <= tier.max) { price += tier.add; break } }
-  for (const tier of pricingConfig.volumeTiers) { if (volume <= tier.max) { price += tier.add; break } }
-  return price
 }
 
 async function runVolumeCheck() {
@@ -319,7 +357,6 @@ async function submitFinalOrder() {
 <template>
   <div class="relative bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
 
-    <!-- HEADER S PROGRESS BAROM -->
     <div class="bg-gray-900 px-6 py-5 border-b border-gray-800">
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-xl font-bold text-white">Rezervacija dostave</h2>
@@ -335,7 +372,6 @@ async function submitFinalOrder() {
     <div class="p-6 sm:p-8 min-h-[400px]">
       <UAlert v-if="formError" icon="i-lucide-alert-circle" color="red" variant="soft" :title="formError" class="mb-6 font-medium" />
 
-      <!-- KORAK 1: KALKULATOR -->
       <div v-if="currentStep === 'calculator'" class="animate-fade-in space-y-6">
         <div v-if="!volumeResult && !isCalculating" class="space-y-6">
           <div class="text-center mb-4">
@@ -376,7 +412,7 @@ async function submitFinalOrder() {
               </label>
               <label class="flex-1 relative flex cursor-pointer rounded-xl border p-3 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'room' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 bg-white'">
                 <input type="radio" v-model="deliveryOption" value="room" class="sr-only" @change="recalculatePrice" />
-                <div class="text-center w-full"><p class="font-bold text-gray-900 text-sm">Unos u prostoriju</p><p class="text-xs text-gray-500">+{{ pricingConfig.roomDeliverySurcharge }} € nadoplata</p></div>
+                <div class="text-center w-full"><p class="font-bold text-gray-900 text-sm">Unos u prostoriju</p><p class="text-xs text-gray-500">Fizički unos na kat</p></div>
               </label>
             </div>
           </UFormField>
@@ -417,7 +453,7 @@ async function submitFinalOrder() {
             </div>
             <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
               <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Cijena dostave</p>
-              <p class="text-2xl font-black text-blue-900">{{ deliveryPrice }} €</p>
+              <p class="text-2xl font-black text-blue-900">{{ Number(deliveryPrice).toFixed(2).replace('.', ',') }} €</p>
             </div>
           </div>
 
@@ -481,7 +517,6 @@ async function submitFinalOrder() {
         </div>
       </div>
 
-      <!-- KORAKOVI OD 2 DO 6 OSTAJU ISTI ... -->
       <div v-if="currentStep === 'reserved'" class="animate-fade-in space-y-6">
         <div class="text-center mb-6">
           <h3 class="text-2xl font-black text-gray-900">Termin je vaš!</h3>
