@@ -97,26 +97,23 @@ function toggleInactiveDate() {
   saveFleet()
 }
 
-// --- 3. LOGIKA ZA CJENIK (SADA S FIKSNIM POLJIMA) ---
+// --- 3. LOGIKA ZA CJENIK ---
 const pricing = ref({
-  // Paketna dostava
   standard: 3.99,
   large: 6.99,
-  // Kolni prilaz
   driveway100: 43.99,
-  // Unos u prostoriju
   room400: 95.20,
   room600: 103.20,
   room1000: 111.20,
   room1400: 207.20,
-  roomOver1400: 250.00
+  roomOver1400: 250.00,
+  disposal: 30.00
 })
 const isSavingPricing = ref(false)
 
 const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
 if (pricingData.value?.success && pricingData.value?.data) {
   const pd = pricingData.value.data
-  // Ako već postoji u bazi, prepiši defaultne vrijednosti
   pricing.value = {
     standard: pd.standard ?? 3.99,
     large: pd.large ?? 6.99,
@@ -125,7 +122,8 @@ if (pricingData.value?.success && pricingData.value?.data) {
     room600: pd.room600 ?? 103.20,
     room1000: pd.room1000 ?? 111.20,
     room1400: pd.room1400 ?? 207.20,
-    roomOver1400: pd.roomOver1400 ?? 250.00
+    roomOver1400: pd.roomOver1400 ?? 250.00,
+    disposal: pd.disposal ?? 30.00
   }
 }
 
@@ -133,8 +131,8 @@ async function savePricing() {
   isSavingPricing.value = true
   try {
     await $fetch('/api/admin/settings/pricing', { method: 'POST', body: pricing.value })
-    alert('Cjenik spremljen uspješno!')
-  } catch (err) { alert('Greška pri spremanju cjenika.') } finally { isSavingPricing.value = false }
+    alert('Cjenik uspješno spremljen!')
+  } catch (err) { alert('Dogodila se greška pri spremanju cjenika.') } finally { isSavingPricing.value = false }
 }
 
 // --- 4. KALENDAR ---
@@ -356,9 +354,9 @@ const currentTab = ref('narudzbe')
           </UCard>
         </div>
 
-        <div v-show="currentTab === 'postavke'" class="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-fade-in">
+        <div v-show="currentTab === 'postavke'" class="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-fade-in items-start">
 
-          <UCard class="shadow-sm border border-gray-200 flex flex-col h-full bg-white">
+          <UCard class="shadow-sm border border-gray-200 flex flex-col bg-white">
             <template #header>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2"><UIcon name="i-lucide-truck" class="w-6 h-6 text-gray-900" /><h2 class="font-bold text-lg text-gray-900">Vozni park</h2></div>
@@ -367,8 +365,9 @@ const currentTab = ref('narudzbe')
             </template>
             <form @submit.prevent="saveFleet" class="flex-1 flex flex-col">
               <p class="text-sm text-gray-500 mb-4">Ovdje dodajte sva vozila kojima raspolažete. Kapaciteti se automatski računaju.</p>
-              <div class="space-y-4 flex-1 max-h-[600px] overflow-y-auto pr-2">
-                <div v-for="(v, index) in fleet.vehicles" :key="v.id" class="bg-gray-50 border border-gray-200 p-5 rounded-2xl relative hover:border-blue-200 transition-colors">
+
+              <div class="space-y-4 flex-1">
+                <div v-for="(v, index) in fleet.vehicles" :key="v.id" class="bg-gray-50 border border-gray-200 p-4 rounded-2xl relative hover:border-blue-200 transition-colors">
                   <div class="absolute top-3 right-3"><UButton color="red" variant="ghost" icon="i-lucide-trash-2" size="sm" @click="removeVehicle(index)" /></div>
                   <UFormField label="Naziv vozila" class="mb-4 pr-10"><UInput v-model="v.name" placeholder="Npr. Iveco Daily" class="w-full font-bold" size="lg" /></UFormField>
                   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -388,29 +387,29 @@ const currentTab = ref('narudzbe')
             </form>
           </UCard>
 
-          <UCard class="shadow-sm border border-gray-200 flex flex-col h-full bg-white">
+          <UCard class="shadow-sm border border-gray-200 flex flex-col bg-white">
             <template #header>
               <div class="flex items-center gap-2"><UIcon name="i-lucide-calculator" class="w-6 h-6 text-gray-900" /><h2 class="font-bold text-lg text-gray-900">Cjenik usluga</h2></div>
             </template>
             <form @submit.prevent="savePricing" class="flex-1 flex flex-col">
               <p class="text-sm text-gray-500 mb-6">Upišite konačne cijene koje želite naplaćivati po definiranim kategorijama težine.</p>
 
-              <div class="space-y-6 flex-1 pr-2 overflow-y-auto max-h-[600px]">
+              <div class="space-y-5 flex-1">
 
-                <div class="bg-gray-50 p-5 rounded-2xl border border-gray-200">
-                  <h3 class="font-bold text-gray-900 mb-4 flex items-center gap-2"><UIcon name="i-lucide-package" class="w-5 h-5 text-gray-500" /> Paketna dostava (Male narudžbe)</h3>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <UFormField label="Standardni paket (do 14.99 kg)">
+                <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                  <h3 class="font-bold text-gray-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-package" class="w-5 h-5 text-gray-500" /> Paketna dostava (Male narudžbe)</h3>
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormField label="Standardni (do 15kg)">
                       <UInput v-model="pricing.standard" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold bg-white" />
                     </UFormField>
-                    <UFormField label="Veliki paket (do 29.99 kg)">
+                    <UFormField label="Veliki (do 30kg)">
                       <UInput v-model="pricing.large" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold bg-white" />
                     </UFormField>
                   </div>
                 </div>
 
-                <div class="bg-gray-900 p-5 rounded-2xl border border-gray-800 text-white">
-                  <h3 class="font-bold text-white mb-4 flex items-center gap-2"><UIcon name="i-lucide-truck" class="w-5 h-5 text-yellow-400" /> Dostava do kolnog prilaza</h3>
+                <div class="bg-gray-900 p-4 rounded-2xl border border-gray-800 text-white">
+                  <h3 class="font-bold text-white mb-3 flex items-center gap-2"><UIcon name="i-lucide-truck" class="w-5 h-5 text-yellow-400" /> Dostava do kolnog prilaza</h3>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <UFormField label="Težina do 100 kg">
                       <UInput v-model="pricing.driveway100" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold text-black" />
@@ -418,9 +417,9 @@ const currentTab = ref('narudzbe')
                   </div>
                 </div>
 
-                <div class="bg-yellow-50 p-5 rounded-2xl border border-yellow-200">
-                  <h3 class="font-bold text-gray-900 mb-4 flex items-center gap-2"><UIcon name="i-lucide-home" class="w-5 h-5 text-yellow-600" /> Dostava u prostoriju (Unos)</h3>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-yellow-50 p-4 rounded-2xl border border-yellow-200">
+                  <h3 class="font-bold text-gray-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-home" class="w-5 h-5 text-yellow-600" /> Dostava u prostoriju (Unos)</h3>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <UFormField label="0 - 400 kg">
                       <UInput v-model="pricing.room400" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold bg-white" />
                     </UFormField>
@@ -435,6 +434,15 @@ const currentTab = ref('narudzbe')
                     </UFormField>
                     <UFormField label="Preko 1400 kg">
                       <UInput v-model="pricing.roomOver1400" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold bg-white text-red-600" />
+                    </UFormField>
+                  </div>
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200">
+                  <h3 class="font-bold text-blue-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-wrench" class="w-5 h-5 text-blue-600" /> Dodatne usluge</h3>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <UFormField label="Odvoz starog namještaja (po komadu)">
+                      <UInput v-model="pricing.disposal" type="number" step="0.01" icon="i-lucide-euro" class="w-full font-bold bg-white text-blue-900" />
                     </UFormField>
                   </div>
                 </div>

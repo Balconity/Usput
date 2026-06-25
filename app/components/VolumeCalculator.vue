@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const emit = defineEmits(['status-changed'])
 
-// --- KONFIGURACIJA CIJENA (NOVI FIKSNI MODEL) ---
+// --- KONFIGURACIJA CIJENA ---
 const pricingConfig = ref({
   standard: 3.99,
   large: 6.99,
@@ -12,27 +12,27 @@ const pricingConfig = ref({
   room600: 103.20,
   room1000: 111.20,
   room1400: 207.20,
-  roomOver1400: 250.00
+  roomOver1400: 250.00,
+  disposal: 30.00
 })
 
 const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
 if (pricingData.value?.success && pricingData.value?.data) {
   const pd = pricingData.value.data
   pricingConfig.value = {
-    standard: pd.standard ?? 3.99,
-    large: pd.large ?? 6.99,
-    driveway100: pd.driveway100 ?? 43.99,
-    room400: pd.room400 ?? 95.20,
-    room600: pd.room600 ?? 103.20,
-    room1000: pd.room1000 ?? 111.20,
-    room1400: pd.room1400 ?? 207.20,
-    roomOver1400: pd.roomOver1400 ?? 250.00
+    standard: pd.standard ? Number(pd.standard) : 3.99,
+    large: pd.large ? Number(pd.large) : 6.99,
+    driveway100: pd.driveway100 ? Number(pd.driveway100) : 43.99,
+    room400: pd.room400 ? Number(pd.room400) : 95.20,
+    room600: pd.room600 ? Number(pd.room600) : 103.20,
+    room1000: pd.room1000 ? Number(pd.room1000) : 111.20,
+    room1400: pd.room1400 ? Number(pd.room1400) : 207.20,
+    roomOver1400: pd.roomOver1400 ? Number(pd.roomOver1400) : 250.00,
+    disposal: pd.disposal ? Number(pd.disposal) : 30.00
   }
 }
 
-const contactConfig = { phone: '091 234 5678', email: 'contact@balconity.hr' }
-
-// --- 1. DOHVAĆANJE VOZNOG PARKA I ZAUZEĆA IZ BAZE ---
+// --- DOHVAĆANJE VOZNOG PARKA I ZAUZEĆA ---
 const fleet = ref({ vehicles: [] as any[], assignments: {} as Record<string, string>, inactiveDates: [] as string[] })
 
 const { data: vehicleData } = await useFetch('/api/admin/settings/vehicle')
@@ -59,7 +59,7 @@ const progressPercentage = computed(() => {
   }
 })
 
-// --- FORMA I PODACI (PAMETNO PREDLAGANJE DATUMA) ---
+// --- FORMA I DATUMI ---
 const inactiveDates = computed(() => fleet.value.inactiveDates || [])
 
 function getDefaultDate() {
@@ -68,10 +68,8 @@ function getDefaultDate() {
   while (!found) {
     date.setDate(date.getDate() + 1)
     if (date.getDay() === 0 || date.getDay() === 6) continue
-
     const dateStr = date.toISOString().split('T')[0]
     if (inactiveDates.value.includes(dateStr)) continue
-
     found = true
   }
   return date.toISOString().split('T')[0]
@@ -87,7 +85,6 @@ const formattedPickupDate = computed(() => {
 
 const isDateInactive = computed(() => inactiveDates.value.includes(pickupDate.value))
 
-// --- IZRAČUN DOSTUPNOSTI PROSTORA U REALNOM VREMENU ---
 const activeVehicle = computed(() => {
   const assignedId = fleet.value.assignments[pickupDate.value]
   if (assignedId) {
@@ -111,10 +108,10 @@ const remainingVolumeForDate = computed(() => {
   return rem > 0 ? Number(rem.toFixed(2)) : 0
 })
 
-watch(pickupDate, () => { if (volumeResult.value) resetCheck() })
-
 const listUrl = ref('')
 const deliveryOption = ref<'curbside' | 'room'>('curbside')
+const wantsDisposal = ref(false)
+const disposalItemsCount = ref(1)
 
 const orderState = reactive({
   name: '', phone: '', email: '', ikeaOrderNumber: '', ikeaEmail: '',
@@ -131,6 +128,53 @@ const totalVolume = ref(0)
 const totalWeight = ref(0)
 const deliveryPrice = ref(0)
 
+// --- PAMETNI PREDLAGAČ DATUMA ---
+const suggestedAlternativeDate = ref<string | null>(null)
+const formattedSuggestedDate = computed(() => {
+  if (!suggestedAlternativeDate.value) return ''
+  return new Date(suggestedAlternativeDate.value).toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' })
+})
+
+function findFirstAvailableDate(requiredVolume: number) {
+  let checkDate = new Date(pickupDate.value)
+  let foundStr = null
+
+  for (let i = 1; i <= 30; i++) {
+    checkDate.setDate(checkDate.getDate() + 1)
+    if (checkDate.getDay() === 0 || checkDate.getDay() === 6) continue
+
+    const dateStr = checkDate.toISOString().split('T')[0]
+    if (inactiveDates.value.includes(dateStr)) continue
+
+    const assignedVid = fleet.value.assignments[dateStr]
+    const checkVehicle = fleet.value.vehicles.find(v => v.id === assignedVid) || fleet.value.vehicles[0]
+    const checkMaxVol = (checkVehicle.length * checkVehicle.width * checkVehicle.height) / 1000000
+
+    const checkBookedVol = occupancyData.value?.occupancy ? (occupancyData.value.occupancy[dateStr] || 0) : 0
+    const checkRemaining = checkMaxVol - checkBookedVol
+
+    if (checkRemaining >= requiredVolume) {
+      foundStr = dateStr
+      break
+    }
+  }
+  suggestedAlternativeDate.value = foundStr
+}
+
+function acceptSuggestedDate() {
+  if (suggestedAlternativeDate.value) {
+    pickupDate.value = suggestedAlternativeDate.value
+  }
+}
+
+watch(pickupDate, () => {
+  if (totalVolume.value > 0 && detectedItems.value.length > 0) {
+    suggestedAlternativeDate.value = null
+    evaluateFit()
+  }
+})
+
+// --- OBRADA ARTIKALA ---
 const groupedProducts = computed(() => {
   const groups: any[] = [];
   detectedItems.value.forEach(item => {
@@ -173,7 +217,10 @@ onMounted(() => {
       const parsed = JSON.parse(savedReservation)
       if (parsed.expires > Date.now()) {
         currentStep.value = 'reserved'
-        listUrl.value = parsed.url; pickupDate.value = parsed.date; totalVolume.value = parsed.volume; deliveryPrice.value = parsed.price; deliveryOption.value = parsed.deliveryOption || 'curbside'
+        listUrl.value = parsed.url; pickupDate.value = parsed.date; totalVolume.value = parsed.volume; deliveryPrice.value = parsed.price;
+        deliveryOption.value = parsed.deliveryOption || 'curbside'
+        wantsDisposal.value = parsed.wantsDisposal || false
+        disposalItemsCount.value = parsed.disposalItemsCount || 1
         startReservationTimer(parsed.expires)
       } else { localStorage.removeItem('usput_reservation') }
     } catch (e) { localStorage.removeItem('usput_reservation') }
@@ -184,33 +231,78 @@ onBeforeUnmount(() => {
   if (loadingInterval) clearInterval(loadingInterval); if (progressInterval) clearInterval(progressInterval); if (reservationInterval) clearInterval(reservationInterval)
 })
 
-// --- LOGIKA ZA TOČAN IZRAČUN PREMA NOVOM CJENIKU ---
 function calculatePrice(volume: number, weight: number, option: string) {
   const p = pricingConfig.value
+  let baseCalc = 0
 
   if (option === 'room') {
-    if (weight <= 400) return p.room400
-    if (weight <= 600) return p.room600
-    if (weight <= 1000) return p.room1000
-    if (weight <= 1400) return p.room1400
-    return p.roomOver1400
+    if (weight <= 400) baseCalc = p.room400
+    else if (weight <= 600) baseCalc = p.room600
+    else if (weight <= 1000) baseCalc = p.room1000
+    else if (weight <= 1400) baseCalc = p.room1400
+    else baseCalc = p.roomOver1400
   } else {
-    // Opcija "Kolni prilaz"
-    if (weight <= 14.99) return p.standard
-    if (weight <= 29.99) return p.large
-    if (weight <= 100) return p.driveway100
-
-    // Ako kupac odabere "Kolni prilaz", a ima preko 100 kg
-    // fall-backamo na cijene za unos u prostoriju jer se ta količina ne može voziti za 43.99€
-    if (weight <= 400) return p.room400
-    if (weight <= 600) return p.room600
-    if (weight <= 1000) return p.room1000
-    if (weight <= 1400) return p.room1400
-    return p.roomOver1400
+    if (weight <= 14.99) baseCalc = p.standard
+    else if (weight <= 29.99) baseCalc = p.large
+    else if (weight <= 100) baseCalc = p.driveway100
+    else {
+      if (weight <= 400) baseCalc = p.room400
+      else if (weight <= 600) baseCalc = p.room600
+      else if (weight <= 1000) baseCalc = p.room1000
+      else if (weight <= 1400) baseCalc = p.room1400
+      else baseCalc = p.roomOver1400
+    }
   }
+
+  let disposalCalc = 0
+  if (wantsDisposal.value && disposalItemsCount.value > 0) {
+    disposalCalc = disposalItemsCount.value * p.disposal
+  }
+
+  return baseCalc + disposalCalc
 }
 
-function recalculatePrice() { deliveryPrice.value = calculatePrice(totalVolume.value, totalWeight.value, deliveryOption.value) }
+function recalculatePrice() {
+  deliveryPrice.value = calculatePrice(totalVolume.value, totalWeight.value, deliveryOption.value)
+}
+
+watch([deliveryOption, wantsDisposal, disposalItemsCount], () => {
+  if (volumeResult.value && volumeResult.value.status === 'success') recalculatePrice()
+})
+
+function evaluateFit() {
+  const vehicleDims = [activeVehicle.value.length, activeVehicle.value.width, activeVehicle.value.height].sort((a, b) => b - a);
+  let oversizedPackage = null;
+
+  for (const item of detectedItems.value) {
+    if (item.dimensions) {
+      const { length = 0, width = 0, height = 0 } = item.dimensions;
+      const pkgDims = [length, width, height].sort((a, b) => b - a);
+      if (pkgDims[0] > vehicleDims[0] || pkgDims[1] > vehicleDims[1] || pkgDims[2] > vehicleDims[2]) {
+        oversizedPackage = item; break;
+      }
+    }
+  }
+
+  const prospectiveTotalVolume = bookedVolumeForDate.value + totalVolume.value
+
+  if (prospectiveTotalVolume > VEHICLE_MAX_VOLUME.value) {
+    findFirstAvailableDate(totalVolume.value)
+    volumeResult.value = {
+      status: 'error',
+      title: 'Nema dovoljno prostora u kombiju.',
+      message: `Vaša narudžba zahtijeva ${totalVolume.value} m³, međutim u vozilu za odabrani dan preostalo je još samo ${remainingVolumeForDate.value} m³ slobodnog mjesta.`
+    }
+  } else if (totalWeight.value > activeVehicle.value.maxWeight) {
+    volumeResult.value = { status: 'error', title: 'Premašena nosivost.', message: `Vaša narudžba (${totalWeight.value} kg) je teža od maksimalne preostale nosivosti vozila.` }
+  } else if (oversizedPackage) {
+    volumeResult.value = { status: 'error', title: 'Paket je prevelik!', message: `Artikl "${oversizedPackage.name}" svojim dimenzijama fizički ne stane u kombi planiran za ovaj datum.` }
+  } else {
+    volumeResult.value = { status: 'success', title: 'Sve stane!', message: `U kombiju ima dovoljno mjesta. Možemo uspješno zaprimiti Vašu dostavu.` }
+  }
+
+  recalculatePrice()
+}
 
 function startLoadingAnimation() {
   currentLoadingMessage.value = loadingMessages[0]; simulatedProgress.value = 0; let messageIndex = 0
@@ -225,6 +317,7 @@ function stopLoadingAnimation() {
 
 function resetCheck() {
   volumeResult.value = null; detectedItems.value = []; totalVolume.value = 0; totalWeight.value = 0; deliveryPrice.value = 0
+  suggestedAlternativeDate.value = null; wantsDisposal.value = false; disposalItemsCount.value = 1
 }
 
 async function runVolumeCheck() {
@@ -239,52 +332,17 @@ async function runVolumeCheck() {
     }
     const response = await $fetch('/api/list-volume', { method: 'POST', body: { url: targetUrl } })
     await new Promise(r => setTimeout(r, 800))
-    handleVolumeResponse(response)
+
+    if (response && response.success) {
+      totalVolume.value = response.data.totalVolume || 0
+      totalWeight.value = response.data.totalWeight || 0
+      if (response.data.parsedItems) detectedItems.value = response.data.parsedItems
+      evaluateFit()
+    }
   } catch (error: any) {
     volumeResult.value = { status: 'error', title: 'Greška', message: error.statusMessage || 'Nismo uspjeli očitati sustav. Provjerite link.' }
   } finally {
-    stopLoadingAnimation()
-    setTimeout(() => { isCalculating.value = false }, 500)
-  }
-}
-
-function handleVolumeResponse(response: any) {
-  if (response && response.success) {
-    const data = response.data
-    totalVolume.value = data.totalVolume || 0
-    totalWeight.value = data.totalWeight || 0
-    deliveryPrice.value = calculatePrice(totalVolume.value, totalWeight.value, deliveryOption.value)
-
-    if (data.parsedItems && data.parsedItems.length > 0) detectedItems.value = data.parsedItems
-
-    const vehicleDims = [activeVehicle.value.length, activeVehicle.value.width, activeVehicle.value.height].sort((a, b) => b - a);
-    let oversizedPackage = null;
-
-    for (const item of detectedItems.value) {
-      if (item.dimensions) {
-        const { length = 0, width = 0, height = 0 } = item.dimensions;
-        const pkgDims = [length, width, height].sort((a, b) => b - a);
-        if (pkgDims[0] > vehicleDims[0] || pkgDims[1] > vehicleDims[1] || pkgDims[2] > vehicleDims[2]) {
-          oversizedPackage = item; break;
-        }
-      }
-    }
-
-    const prospectiveTotalVolume = bookedVolumeForDate.value + totalVolume.value
-
-    if (prospectiveTotalVolume > VEHICLE_MAX_VOLUME.value) {
-      volumeResult.value = {
-        status: 'error',
-        title: 'Nema dovoljno prostora u kombiju.',
-        message: `Vaša narudžba zahtijeva ${totalVolume.value} m³, međutim u vozilu za odabrani dan preostalo je još samo ${remainingVolumeForDate.value} m³ slobodnog mjesta.`
-      }
-    } else if (totalWeight.value > activeVehicle.value.maxWeight) {
-      volumeResult.value = { status: 'error', title: 'Premašena nosivost.', message: `Vaša narudžba (${totalWeight.value} kg) je teža od maksimalne preostale nosivosti vozila.` }
-    } else if (oversizedPackage) {
-      volumeResult.value = { status: 'error', title: 'Paket je prevelik!', message: `Artikl "${oversizedPackage.name}" svojim dimenzijama fizički ne stane u kombi planiran za ovaj datum.` }
-    } else {
-      volumeResult.value = { status: 'success', title: 'Sve stane!', message: `U kombiju ima dovoljno mjesta. Možemo uspješno zaprimiti Vašu dostavu.` }
-    }
+    stopLoadingAnimation(); setTimeout(() => { isCalculating.value = false }, 500)
   }
 }
 
@@ -292,7 +350,8 @@ function confirmReservation() {
   currentStep.value = 'reserved'
   const expiresAt = Date.now() + 30 * 60 * 1000
   localStorage.setItem('usput_reservation', JSON.stringify({
-    expires: expiresAt, date: pickupDate.value, url: listUrl.value, volume: totalVolume.value, price: deliveryPrice.value, deliveryOption: deliveryOption.value
+    expires: expiresAt, date: pickupDate.value, url: listUrl.value, volume: totalVolume.value, price: deliveryPrice.value,
+    deliveryOption: deliveryOption.value, wantsDisposal: wantsDisposal.value, disposalItemsCount: disposalItemsCount.value
   }))
   startReservationTimer(expiresAt)
 }
@@ -303,8 +362,7 @@ function startReservationTimer(expiresAt: number) {
     if (remaining <= 0) { clearInterval(reservationInterval); alert('Vaša rezervacija je istekla.'); cancelReservation(true) }
     else { reservationTimeLeft.value = remaining }
   }
-  update()
-  reservationInterval = setInterval(update, 1000)
+  update(); reservationInterval = setInterval(update, 1000)
 }
 
 function cancelReservation(autoExpired = false) {
@@ -340,7 +398,15 @@ async function submitFinalOrder() {
         personalInfo: { name: orderState.name, email: orderState.email, phone: orderState.phone },
         ikeaDetails: { orderNumber: orderState.ikeaOrderNumber, ikeaEmail: orderState.ikeaEmail, listUrl: listUrl.value },
         delivery: { date: pickupDate.value, option: deliveryOption.value, street: orderState.street, city: orderState.city, zip: orderState.zip, objectType: orderState.objectType, floor: orderState.floor, hasElevator: orderState.hasElevator, notes: orderState.notes },
-        transport: { price: deliveryPrice.value, totalVolume: totalVolume.value, totalWeight: totalWeight.value, totalBoxes: groupedProducts.value.reduce((acc, g) => acc + g.totalBoxes, 0), items: groupedProducts.value }
+        transport: {
+          price: deliveryPrice.value,
+          totalVolume: totalVolume.value,
+          totalWeight: totalWeight.value,
+          totalBoxes: groupedProducts.value.reduce((acc, g) => acc + g.totalBoxes, 0),
+          items: groupedProducts.value,
+          disposalRequested: wantsDisposal.value,
+          disposalItemsCount: wantsDisposal.value ? disposalItemsCount.value : 0
+        }
       }
     })
     if (response && response.success) {
@@ -360,9 +426,18 @@ async function submitFinalOrder() {
     <div class="bg-gray-900 px-6 py-5 border-b border-gray-800">
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-xl font-bold text-white">Rezervacija dostave</h2>
-        <span class="text-xs font-bold bg-gray-800 text-yellow-400 px-3 py-1 rounded-full">
-          Korak {{ currentStep === 'calculator' ? '1/5' : currentStep === 'reserved' ? '2/5' : currentStep === 'contact_info' ? '3/5' : currentStep === 'ikea_details' ? '4/5' : currentStep === 'delivery_details' ? '5/5' : 'Završeno' }}
-        </span>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <div v-if="currentStep !== 'calculator' && currentStep !== 'success' && reservationTimeLeft > 0"
+               class="flex items-center gap-1.5 text-xs font-black bg-gray-800 px-3 py-1 rounded-full text-red-400 border border-red-500/30 shadow-inner"
+               :class="{'animate-pulse': reservationTimeLeft < 300}">
+            <UIcon name="i-lucide-clock" class="w-3.5 h-3.5" />
+            <span class="font-mono tracking-widest">{{ formattedTimeLeft }}</span>
+          </div>
+
+          <span class="text-xs font-bold bg-gray-800 text-yellow-400 px-3 py-1 rounded-full hidden sm:inline-block">
+            Korak {{ currentStep === 'calculator' ? '1/5' : currentStep === 'reserved' ? '2/5' : currentStep === 'contact_info' ? '3/5' : currentStep === 'ikea_details' ? '4/5' : currentStep === 'delivery_details' ? '5/5' : 'Završeno' }}
+          </span>
+        </div>
       </div>
       <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
         <div class="bg-yellow-400 h-1.5 transition-all duration-500 ease-out" :style="`width: ${progressPercentage}%`"></div>
@@ -373,55 +448,42 @@ async function submitFinalOrder() {
       <UAlert v-if="formError" icon="i-lucide-alert-circle" color="red" variant="soft" :title="formError" class="mb-6 font-medium" />
 
       <div v-if="currentStep === 'calculator'" class="animate-fade-in space-y-6">
-        <div v-if="!volumeResult && !isCalculating" class="space-y-6">
-          <div class="text-center mb-4">
-            <div class="w-12 h-12 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center mx-auto mb-4"><UIcon name="i-lucide-link" class="w-6 h-6" /></div>
-            <h3 class="text-xl font-extrabold text-gray-900">Unos liste i izračun cijene</h3>
-            <p class="text-sm text-gray-500 mt-1">Doznajte odmah cijenu dostave i provjerite slobodan prostor.</p>
-          </div>
 
-          <div class="bg-gray-50 border p-4 rounded-2xl space-y-3 transition-colors" :class="isDateInactive ? 'border-red-300 bg-red-50/30' : 'border-gray-200'">
-            <UFormField label="Datum preuzimanja u Zagrebu">
-              <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" class="w-full bg-white" :class="{'ring-2 ring-red-500 border-red-500': isDateInactive}" />
-            </UFormField>
-
-            <div v-if="isDateInactive" class="flex items-center gap-2 text-sm font-bold text-red-600 mt-2">
-              <UIcon name="i-lucide-ban" class="w-5 h-5 shrink-0" />
-              Nažalost, za odabrani datum ne vršimo preuzimanja. Molimo odaberite drugi dan.
-            </div>
-
-            <template v-else>
-              <div class="flex items-center justify-between text-xs pt-1 border-t border-gray-200/60 font-medium">
-                <span class="text-gray-500">Dostupno vozilo za ovaj dan:</span>
-                <span class="text-gray-900 font-bold uppercase tracking-wider">{{ activeVehicle?.name }}</span>
-              </div>
-              <div class="flex items-center justify-between text-xs font-medium">
-                <span class="text-gray-500">Preostali slobodni prostor:</span>
-                <span class="font-black text-sm" :class="remainingVolumeForDate <= 0.5 ? 'text-red-500 animate-pulse' : (remainingVolumeForDate <= 2 ? 'text-yellow-600' : 'text-green-600')">
-                  {{ remainingVolumeForDate }} m³ <span class="text-[10px] font-normal text-gray-400">(od ukupno {{ VEHICLE_MAX_VOLUME }} m³)</span>
-                </span>
-              </div>
-            </template>
-          </div>
-
-          <UFormField label="Usluga istovara na adresi">
-            <div class="flex gap-4 mt-1 w-full">
-              <label class="flex-1 relative flex cursor-pointer rounded-xl border p-3 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'curbside' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 bg-white'">
-                <input type="radio" v-model="deliveryOption" value="curbside" class="sr-only" @change="recalculatePrice" />
-                <div class="text-center w-full"><p class="font-bold text-gray-900 text-sm">Do kolnog prilaza</p><p class="text-xs text-gray-500">Istovar ispred objekta</p></div>
-              </label>
-              <label class="flex-1 relative flex cursor-pointer rounded-xl border p-3 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'room' ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'border-gray-200 bg-white'">
-                <input type="radio" v-model="deliveryOption" value="room" class="sr-only" @change="recalculatePrice" />
-                <div class="text-center w-full"><p class="font-bold text-gray-900 text-sm">Unos u prostoriju</p><p class="text-xs text-gray-500">Fizički unos na kat</p></div>
-              </label>
-            </div>
+        <div class="bg-gray-50 border p-4 rounded-2xl space-y-3 transition-colors" :class="isDateInactive ? 'border-red-300 bg-red-50/30' : 'border-gray-200'">
+          <UFormField label="Odaberite datum dostave">
+            <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" class="w-full bg-white font-bold text-gray-900" :class="{'ring-2 ring-red-500 border-red-500': isDateInactive}" />
           </UFormField>
 
-          <UFormField label="Poveznica podijeljene košarice">
-            <UInput v-model="listUrl" type="text" placeholder="Zalijepite link ili poruku s mobitela..." size="xl" icon="i-lucide-search" class="w-full" />
+          <div v-if="isDateInactive" class="flex items-center gap-2 text-sm font-bold text-red-600 mt-2">
+            <UIcon name="i-lucide-ban" class="w-5 h-5 shrink-0" />
+            Nažalost, za odabrani datum ne vršimo preuzimanja. Molimo odaberite drugi dan.
+          </div>
+
+          <template v-else>
+            <div class="flex items-center justify-between text-xs pt-1 border-t border-gray-200/60 font-medium">
+              <span class="text-gray-500">Dostupno vozilo za ovaj dan:</span>
+              <span class="text-gray-900 font-bold uppercase tracking-wider">{{ activeVehicle?.name }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs font-medium">
+              <span class="text-gray-500">Preostali slobodni prostor:</span>
+              <span class="font-black text-sm" :class="remainingVolumeForDate <= 0.5 ? 'text-red-500 animate-pulse' : (remainingVolumeForDate <= 2 ? 'text-yellow-600' : 'text-green-600')">
+                {{ remainingVolumeForDate }} m³ <span class="text-[10px] font-normal text-gray-400">(od ukupno {{ VEHICLE_MAX_VOLUME }} m³)</span>
+              </span>
+            </div>
+          </template>
+        </div>
+
+        <div v-if="!volumeResult && !isCalculating" class="space-y-6 animate-fade-in">
+          <div class="text-center mb-4 mt-2">
+            <h3 class="text-xl font-extrabold text-gray-900">Izračunajte cijenu</h3>
+            <p class="text-sm text-gray-500 mt-1">Unesite popis za kupovinu i provjerite prostor u kombiju.</p>
+          </div>
+
+          <UFormField label="Poveznica podijeljene košarice (IKEA popis)">
+            <UInput v-model="listUrl" type="text" placeholder="Zalijepite ovdje link iz IKEA aplikacije..." size="xl" icon="i-lucide-search" class="w-full" />
           </UFormField>
 
-          <UButton block class="mt-2 font-black shadow-md" style="background-color: #facc15; color: #000;" size="xl" :disabled="!listUrl || !pickupDate || remainingVolumeForDate <= 0 || isDateInactive" @click="runVolumeCheck">
+          <UButton block class="mt-2 font-black shadow-md hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :disabled="!listUrl || !pickupDate || remainingVolumeForDate <= 0 || isDateInactive" @click="runVolumeCheck">
             {{ isDateInactive ? 'Odabrani dan je neradni' : (remainingVolumeForDate <= 0 ? 'Ovaj termin je popunjen' : 'Provjeri gabarite i izračunaj cijenu') }}
           </UButton>
         </div>
@@ -440,7 +502,15 @@ async function submitFinalOrder() {
           <UAlert v-if="volumeResult.status === 'error'" color="red" variant="soft" icon="i-lucide-alert-circle" :title="volumeResult.title" :description="volumeResult.message" class="font-bold" />
           <UAlert v-else color="green" variant="soft" icon="i-lucide-check-circle" :title="volumeResult.title" :description="volumeResult.message" class="font-bold" />
 
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div v-if="volumeResult.status === 'error' && suggestedAlternativeDate" class="bg-blue-50 border border-blue-200 rounded-xl p-5 mt-2 animate-fade-in text-center shadow-inner">
+            <h4 class="font-bold text-blue-900 mb-2">Pronašli smo slobodan termin za Vas!</h4>
+            <p class="text-sm text-blue-700 mb-4">Vaša roba bez problema stane u naš kombi u sljedećem terminu:</p>
+            <UButton size="lg" color="blue" class="font-black w-full justify-center shadow-md hover:-translate-y-0.5 transition-transform" @click="acceptSuggestedDate">
+              Odaberi {{ formattedSuggestedDate }}
+            </UButton>
+          </div>
+
+          <div v-if="volumeResult.status === 'success'" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
               <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Volumen narudžbe</p>
               <p class="text-2xl font-black text-gray-900">{{ totalVolume }} m³</p>
@@ -451,19 +521,19 @@ async function submitFinalOrder() {
               <p class="text-2xl font-black text-gray-900">{{ totalWeight }} kg</p>
               <p class="text-[10px] text-gray-500 mt-0.5">Maks. nosivost: {{ activeVehicle.maxWeight }} kg</p>
             </div>
-            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
-              <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Cijena dostave</p>
-              <p class="text-2xl font-black text-blue-900">{{ Number(deliveryPrice).toFixed(2).replace('.', ',') }} €</p>
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center col-span-2 sm:col-span-1 relative overflow-hidden flex flex-col justify-center transition-colors" :class="{'bg-yellow-50 border-yellow-200': wantsDisposal}">
+              <div v-if="wantsDisposal" class="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[8px] font-black uppercase px-2 py-0.5 rounded-bl-lg">S Odvozom</div>
+              <p class="text-[10px] font-bold uppercase tracking-wider mb-1" :class="wantsDisposal ? 'text-yellow-700' : 'text-blue-700'">Ukupna cijena</p>
+              <p class="text-2xl font-black" :class="wantsDisposal ? 'text-yellow-900' : 'text-blue-900'">{{ Number(deliveryPrice).toFixed(2).replace('.', ',') }} €</p>
             </div>
           </div>
 
-          <div v-if="groupedProducts.length > 0">
+          <div v-if="volumeResult.status === 'success' && groupedProducts.length > 0">
             <h4 class="text-base font-extrabold text-gray-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-shopping-bag" class="w-5 h-5 text-yellow-500" /> Vaši IKEA paketi</h4>
-            <div class="space-y-4">
+            <div class="space-y-4 max-h-[250px] overflow-y-auto pr-1 pb-2">
               <div v-for="group in groupedProducts" :key="group.code" class="border border-gray-200 rounded-2xl overflow-hidden shadow-md bg-white">
-
                 <div class="bg-gray-900 p-4 flex items-center gap-3 border-b border-gray-800 text-white">
-                  <img v-if="group.image" :src="group.image" class="w-14 h-14 object-contain rounded-xl border bg-white shrink-0" />
+                  <img v-if="group.image" :src="group.image" class="w-12 h-12 object-contain rounded-xl border bg-white shrink-0" />
                   <div class="space-y-0.5">
                     <h5 class="font-bold text-yellow-400 text-sm sm:text-base leading-tight">{{ group.name }}</h5>
                     <div class="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs font-medium text-gray-400 mt-1">
@@ -474,46 +544,80 @@ async function submitFinalOrder() {
                     </div>
                   </div>
                 </div>
-
-                <div class="p-3 bg-gray-50/50">
-                  <ul class="divide-y divide-gray-100 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-inner">
-                    <li v-for="pkg in group.packages" :key="pkg.code" class="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                      <div class="min-w-0"><p class="font-bold text-gray-800 leading-tight">{{ pkg.name }}</p></div>
-
-                      <div class="flex flex-wrap items-center justify-between sm:justify-end gap-4 sm:gap-6 font-medium text-gray-500 border-t sm:border-t-0 pt-2 sm:pt-0">
-                        <div>
-                          <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Dimenzije</p>
-                          <p class="font-mono text-gray-700 font-bold">{{ pkg.dimensions.width }}×{{ pkg.dimensions.height }}×{{ pkg.dimensions.length }} cm</p>
-                        </div>
-                        <div class="min-w-[60px]">
-                          <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Volumen</p>
-                          <p class="text-sky-700 font-black">{{ (pkg.dimensions.volume * pkg.quantity).toFixed(3) }} m³</p>
-                        </div>
-                        <div class="min-w-[60px]">
-                          <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Težina</p>
-                          <p class="text-amber-700 font-black">{{ (pkg.dimensions.weight * pkg.quantity).toFixed(2) }} kg</p>
-                        </div>
-                        <div class="font-black bg-gray-100 text-gray-800 px-2.5 py-1 rounded-md border border-gray-200 text-[11px] shrink-0">
-                          {{ pkg.quantity }} kom
-                        </div>
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-
               </div>
             </div>
           </div>
 
-          <div v-if="volumeResult.status === 'success'" class="space-y-4 pt-2">
-            <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
-              <span class="text-sm font-medium text-gray-700">Trebate li ipak unos robe u kuću/stan?</span>
-              <UToggle v-model="deliveryOption" on-value="room" off-value="curbside" color="yellow" @change="recalculatePrice" />
-            </div>
-            <UButton block class="shadow-xl font-black" style="background-color: #facc15; color: #000;" size="xl" icon="i-lucide-arrow-right" trailing @click="confirmReservation">Sve je točno, rezerviraj termin</UButton>
+          <div v-if="volumeResult.status === 'success'" class="space-y-6 pt-4 border-t border-gray-200">
+
+            <UFormField label="1. Odaberite način istovara (Obavezno)">
+              <div class="flex flex-col sm:flex-row gap-4 w-full mt-2">
+                <label class="flex-1 relative flex cursor-pointer rounded-2xl border p-4 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'curbside' ? 'bg-yellow-50 border-yellow-500 ring-1 ring-yellow-500' : 'border-gray-200 bg-white'">
+                  <input type="radio" v-model="deliveryOption" value="curbside" class="sr-only" @change="recalculatePrice" />
+                  <div class="flex items-center gap-3 w-full">
+                    <div class="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center shrink-0">
+                      <UIcon name="i-lucide-truck" class="w-5 h-5 text-gray-700" />
+                    </div>
+                    <div>
+                      <p class="font-bold text-gray-900 text-sm leading-tight">Do kolnog prilaza</p>
+                      <p class="text-xs text-gray-500 mt-0.5">Istovar ispred objekta</p>
+                    </div>
+                  </div>
+                </label>
+
+                <label class="flex-1 relative flex cursor-pointer rounded-2xl border p-4 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'room' ? 'bg-yellow-50 border-yellow-500 ring-1 ring-yellow-500' : 'border-gray-200 bg-white'">
+                  <input type="radio" v-model="deliveryOption" value="room" class="sr-only" @change="recalculatePrice" />
+                  <div class="flex items-center gap-3 w-full">
+                    <div class="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center shrink-0">
+                      <UIcon name="i-lucide-arrow-up-circle" class="w-5 h-5 text-gray-700" />
+                    </div>
+                    <div>
+                      <p class="font-bold text-gray-900 text-sm leading-tight">Unos u prostoriju</p>
+                      <p class="text-xs text-gray-500 mt-0.5">Fizički unos na kat / kuću</p>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </UFormField>
+
+            <UFormField label="2. Dodatne usluge (Opcionalno)">
+              <label class="mt-2 relative flex flex-col cursor-pointer rounded-2xl border hover:bg-gray-50 transition-colors overflow-hidden" :class="wantsDisposal ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-400' : 'border-gray-200 bg-white'">
+                <input type="checkbox" v-model="wantsDisposal" class="sr-only" />
+
+                <div class="p-4 flex items-center justify-between w-full">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center shrink-0">
+                      <UIcon name="i-lucide-trash-2" class="w-5 h-5 text-gray-700" />
+                    </div>
+                    <div class="text-left">
+                      <p class="font-bold text-gray-900 text-sm">Zbrinjavanje starog namještaja</p>
+                      <p class="text-xs text-gray-500 mt-0.5">Odvoz i reciklaža (+{{ Number(pricingConfig.disposal).toFixed(2).replace('.', ',') }} € / kom)</p>
+                    </div>
+                  </div>
+                  <UIcon :name="wantsDisposal ? 'i-lucide-check-square-2' : 'i-lucide-square'" class="w-6 h-6 shrink-0 transition-colors" :class="wantsDisposal ? 'text-blue-600' : 'text-gray-300'" />
+                </div>
+
+                <div v-if="wantsDisposal" class="px-4 pb-4 animate-fade-in">
+                  <div class="pt-4 border-t border-blue-200/50 flex items-center justify-between">
+                    <span class="text-sm font-bold text-blue-900">Koliko komada odnosimo?</span>
+                    <div class="flex items-center gap-3 bg-white border border-blue-200 rounded-lg p-1 shadow-sm" @click.prevent>
+                      <button @click.prevent="disposalItemsCount > 1 ? disposalItemsCount-- : null" class="w-8 h-8 rounded flex items-center justify-center text-blue-700 hover:bg-blue-50 transition-colors font-bold disabled:opacity-30 disabled:hover:bg-transparent" :disabled="disposalItemsCount <= 1">
+                        <UIcon name="i-lucide-minus" class="w-4 h-4" />
+                      </button>
+                      <span class="font-black text-gray-900 w-4 text-center">{{ disposalItemsCount }}</span>
+                      <button @click.prevent="disposalItemsCount++" class="w-8 h-8 rounded flex items-center justify-center text-blue-700 hover:bg-blue-50 transition-colors font-bold">
+                        <UIcon name="i-lucide-plus" class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </label>
+            </UFormField>
+
+            <UButton block class="shadow-xl font-black mt-8" style="background-color: #facc15; color: #000;" size="xl" icon="i-lucide-arrow-right" trailing @click="confirmReservation">Sve je točno, rezerviraj termin</UButton>
           </div>
 
-          <button @click="resetCheck" class="w-full text-center text-xs font-bold text-gray-400 hover:text-gray-900 underline mt-4">Provjeri novi link</button>
+          <button @click="resetCheck" class="w-full text-center text-xs font-bold text-gray-400 hover:text-gray-900 underline mt-4">Odustani i provjeri drugu košaricu</button>
         </div>
       </div>
 
@@ -529,11 +633,7 @@ async function submitFinalOrder() {
             <li>Ostavite ovaj prozor otvorenim.</li><li>Otiđite na IKEA webshop i završite kupnju.</li><li>Odaberite <strong>IKEA Paketomat</strong>.</li><li>Za preuzimatelja upišite: <span class="bg-white px-2 py-1 rounded shadow-sm text-black border select-all">Tomislav Levkuš</span></li><li>Vratite se ovdje za nastavak.</li>
           </ol>
         </div>
-        <div class="flex items-center justify-between bg-gray-900 text-white rounded-xl px-6 py-4 shadow-inner mt-4">
-          <span class="text-sm font-bold text-gray-400 uppercase tracking-widest">Preostalo vrijeme:</span>
-          <span class="text-3xl font-mono font-black text-yellow-400">{{ formattedTimeLeft }}</span>
-        </div>
-        <UButton block size="xl" style="background-color: #facc15; color: #000; font-weight: 900;" class="mt-4" @click="proceedToContact">Završio/la sam kupnju, idemo dalje &rarr;</UButton>
+        <UButton block size="xl" style="background-color: #facc15; color: #000; font-weight: 900;" class="mt-4 hover:-translate-y-0.5 transition-transform" @click="proceedToContact">Završio/la sam kupnju, idemo dalje &rarr;</UButton>
         <button @click="cancelReservation(false)" class="w-full text-center text-xs font-bold text-gray-400 hover:text-red-500 underline transition-colors mt-2">Odustani od rezervacije</button>
       </div>
 
@@ -542,14 +642,14 @@ async function submitFinalOrder() {
         <UFormField label="Vaše ime i prezime" required><UInput v-model="orderState.name" size="lg" icon="i-lucide-user" class="w-full" /></UFormField>
         <UFormField label="E-mail adresa" required><UInput v-model="orderState.email" type="email" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
         <UFormField label="Broj mobitela" required><UInput v-model="orderState.phone" type="tel" size="lg" icon="i-lucide-phone" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton><UButton class="flex-1 justify-center font-bold" color="black" size="xl" @click="proceedToIkeaDetails">Sljedeći korak &rarr;</UButton></div>
+        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton><UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToIkeaDetails">Sljedeći korak &rarr;</UButton></div>
       </div>
 
       <div v-if="currentStep === 'ikea_details'" class="animate-fade-in space-y-6">
         <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Podaci iz IKEA-e</h3></div>
         <UFormField label="Broj narudžbe" required><UInput v-model="orderState.ikeaOrderNumber" size="lg" icon="i-lucide-hash" class="w-full" /></UFormField>
         <UFormField label="E-mail s kojim je naručeno" required><UInput v-model="orderState.ikeaEmail" type="email" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton><UButton class="flex-1 justify-center font-bold" color="black" size="xl" @click="proceedToDelivery">Zadnji korak &rarr;</UButton></div>
+        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton><UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToDelivery">Zadnji korak &rarr;</UButton></div>
       </div>
 
       <div v-if="currentStep === 'delivery_details'" class="animate-fade-in space-y-6">
@@ -570,13 +670,14 @@ async function submitFinalOrder() {
           <div v-if="orderState.objectType === 'zgrada'" class="mt-4 pt-4 border-t border-gray-200"><UCheckbox v-model="orderState.hasElevator" color="yellow" class="font-bold text-gray-900"><template #label>Zgrada ima <strong>prostran lift</strong></template></UCheckbox></div>
         </div>
         <UFormField label="Napomena za vozača (Opcionalno)"><UTextarea v-model="orderState.notes" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton><UButton class="flex-1 justify-center shadow-xl font-black" style="background-color: #facc15; color: #000;" size="xl" :loading="isSubmitting" @click="submitFinalOrder">Pošalji narudžbu</UButton></div>
+        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton><UButton class="flex-1 justify-center shadow-xl font-black hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :loading="isSubmitting" @click="submitFinalOrder">Pošalji narudžbu</UButton></div>
       </div>
 
       <div v-if="currentStep === 'success'" class="animate-fade-in text-center py-10">
         <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><UIcon name="i-lucide-check-circle" class="w-12 h-12 text-green-600" /></div>
         <h3 class="text-3xl font-black text-gray-900 mb-4">Sve je dogovoreno!</h3>
-        <p class="text-lg text-gray-600 max-w-md mx-auto">Zahtjev za dostavu je uspješno zaprimljen za <strong>{{ formattedPickupDate }}</strong>.</p>
+        <p class="text-lg text-gray-600 max-w-md mx-auto mb-2">Zahtjev za dostavu je uspješno zaprimljen za <strong>{{ formattedPickupDate }}</strong>.</p>
+        <p class="text-sm font-bold text-gray-500">Kopiju potvrde poslali smo Vam na e-mail.</p>
       </div>
     </div>
   </div>

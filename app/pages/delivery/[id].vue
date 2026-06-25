@@ -74,14 +74,11 @@ async function submitLockerData() {
 <template>
   <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black">
 
-    <!-- ZAJEDNIČKI HEADER -->
     <AppHeader />
 
-    <!-- GLAVNI SADRŽAJ -->
     <main class="flex-grow py-8 px-4 sm:px-6 lg:px-8">
       <div class="max-w-4xl mx-auto">
 
-        <!-- NASLOV -->
         <div class="text-center mb-10">
           <h1 class="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">Status Vaše dostave</h1>
           <p class="text-gray-500 mt-2 font-mono text-sm bg-white inline-block px-4 py-1.5 rounded-full border border-gray-200 shadow-sm shadow-gray-100">
@@ -89,13 +86,11 @@ async function submitLockerData() {
           </p>
         </div>
 
-        <!-- UČITAVANJE -->
         <div v-if="pending" class="flex flex-col items-center justify-center bg-white p-20 rounded-3xl shadow-sm border border-gray-200">
           <UIcon name="i-lucide-loader-2" class="w-12 h-12 text-yellow-500 animate-spin mb-4" />
           <p class="text-gray-500 font-medium text-lg">Dohvaćam detalje isporuke...</p>
         </div>
 
-        <!-- GREŠKA -->
         <div v-else-if="error || !data?.success" class="bg-white p-16 rounded-3xl shadow-sm border border-red-100 text-center">
           <div class="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <UIcon name="i-lucide-x-circle" class="w-10 h-10" />
@@ -104,18 +99,14 @@ async function submitLockerData() {
           <p class="text-gray-500 text-lg">Molimo provjerite je li link koji ste dobili točan i potpun.</p>
         </div>
 
-        <!-- SADRŽAJ NARUDŽBE -->
         <div v-else-if="data?.order" class="space-y-8 animate-fade-in">
 
-          <!-- 1. VIZUALNI STEPPER STATUSA -->
           <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 sm:p-10 relative overflow-hidden">
             <h2 class="text-xl font-bold text-gray-900 mb-10 text-center sm:text-left">Tijek isporuke</h2>
 
             <div class="relative max-w-3xl mx-auto">
-              <!-- Background linija -->
               <div class="absolute left-6 top-0 bottom-0 w-1 bg-gray-100 sm:left-0 sm:top-1/2 sm:-mt-0.5 sm:bottom-auto sm:w-full sm:h-1 z-0 rounded-full"></div>
 
-              <!-- Popunjena linija -->
               <div class="hidden sm:block absolute left-0 top-1/2 -mt-0.5 h-1 bg-yellow-400 rounded-full z-0 transition-all duration-700 ease-out"
                    :style="{ width: `${(currentStatusIndex / (statuses.length - 1)) * 100}%` }">
               </div>
@@ -123,7 +114,6 @@ async function submitLockerData() {
               <div class="relative z-10 flex flex-col sm:flex-row justify-between gap-10 sm:gap-0">
                 <div v-for="(status, index) in statuses" :key="status.key" class="relative flex sm:flex-col items-center gap-4 sm:gap-3 group">
 
-                  <!-- Krug s ikonom -->
                   <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-4 border-white flex items-center justify-center z-10 shrink-0 transition-all duration-500"
                        :class="[
                          index < currentStatusIndex ? 'bg-gray-900 text-white' : '',
@@ -134,7 +124,6 @@ async function submitLockerData() {
                     <UIcon v-else :name="status.icon" class="w-6 h-6" />
                   </div>
 
-                  <!-- Tekst statusa -->
                   <div class="sm:text-center flex-1">
                     <p class="text-base sm:text-sm font-bold transition-colors" :class="index <= currentStatusIndex ? 'text-gray-900' : 'text-gray-400'">
                       {{ status.label }}
@@ -149,7 +138,6 @@ async function submitLockerData() {
             </div>
           </div>
 
-          <!-- 2. FORMA ZA PIN (Prikazuje se samo ako nije upisan i ako nije još preuzeto) -->
           <div v-if="!isPinProvided && (data.order.status === 'NOVO' || data.order.status === 'U_OBRADI')" class="bg-yellow-50 border border-yellow-300 rounded-3xl p-6 sm:p-10 shadow-md relative overflow-hidden">
             <div class="absolute -right-10 -top-10 opacity-10 pointer-events-none">
               <UIcon name="i-lucide-key" class="w-64 h-64 text-yellow-600" />
@@ -189,7 +177,6 @@ async function submitLockerData() {
             </div>
           </div>
 
-          <!-- Prikaz zahvale ako je PIN uspješno poslan -->
           <div v-else-if="isPinProvided" class="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 sm:p-6 flex items-start sm:items-center gap-4 text-emerald-800 shadow-sm">
             <UIcon name="i-lucide-shield-check" class="w-10 h-10 shrink-0 text-emerald-600" />
             <div>
@@ -198,10 +185,8 @@ async function submitLockerData() {
             </div>
           </div>
 
-          <!-- 3. GLAVNE INFORMACIJE (GRID) -->
           <div class="grid sm:grid-cols-2 gap-6">
 
-            <!-- DATUM I ADRESA -->
             <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 flex flex-col justify-between">
               <div>
                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -224,12 +209,11 @@ async function submitLockerData() {
               </div>
             </div>
 
-            <!-- CIJENA I DETALJI (TAMNA KARTICA) -->
             <div class="bg-gray-900 rounded-3xl shadow-xl border border-gray-800 p-6 sm:p-8 text-white relative overflow-hidden flex flex-col justify-between">
               <div class="absolute top-0 right-0 w-48 h-48 bg-yellow-400 rounded-bl-full opacity-10 pointer-events-none"></div>
 
               <div class="relative z-10 mb-8">
-                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Cijena prijevoza</h3>
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Cijena prijevoza i usluga</h3>
                 <div class="flex items-end gap-3">
                   <span class="text-5xl font-black text-yellow-400 tracking-tighter">{{ data.order.transport.price }} €</span>
                   <span class="text-gray-400 mb-2 text-sm font-bold uppercase tracking-wider">za naplatu</span>
@@ -244,6 +228,12 @@ async function submitLockerData() {
                     {{ data.order.delivery.option === 'room' ? 'Unos u prostor' : 'Do prilaza' }}
                   </strong>
                 </li>
+
+                <li v-if="data.order.transport.disposalRequested && data.order.transport.disposalItemsCount > 0" class="flex justify-between items-center border-b border-gray-700/50 pb-3">
+                  <span class="font-medium text-gray-400 flex items-center gap-1.5"><UIcon name="i-lucide-trash-2" class="w-4 h-4 text-yellow-500"/> Zbrinjavanje:</span>
+                  <strong class="text-yellow-400">{{ data.order.transport.disposalItemsCount }} kom</strong>
+                </li>
+
                 <li class="flex justify-between items-center border-b border-gray-700/50 pb-3">
                   <span class="font-medium text-gray-400">Ukupna težina:</span>
                   <strong class="text-white">{{ data.order.transport.totalWeight }} kg</strong>
@@ -256,7 +246,6 @@ async function submitLockerData() {
             </div>
           </div>
 
-          <!-- 4. POPIS ARTIKALA -->
           <div v-if="data.order.transport?.items && data.order.transport.items.length > 0" class="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="bg-gray-50 px-6 sm:px-8 py-5 border-b border-gray-200">
               <h3 class="text-base font-black text-gray-900 uppercase tracking-wider flex items-center gap-2">
@@ -286,7 +275,6 @@ async function submitLockerData() {
             </div>
           </div>
 
-          <!-- PODRŠKA -->
           <div class="bg-blue-50 rounded-3xl p-6 sm:p-8 border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left shadow-sm">
             <div>
               <h4 class="font-black text-xl text-blue-900 mb-1">Pitanja u vezi dostave?</h4>
@@ -301,7 +289,6 @@ async function submitLockerData() {
       </div>
     </main>
 
-    <!-- ZAJEDNIČKI FOOTER -->
     <AppFooter />
   </div>
 </template>

@@ -69,29 +69,23 @@ const ikeaTrackingUrl = computed(() => {
 <template>
   <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black">
 
-    <!-- ZAJEDNIČKI HEADER -->
     <AppHeader />
 
-    <!-- GLAVNI SADRŽAJ -->
     <main class="flex-grow">
       <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6">
 
-        <!-- LOADING STATE -->
         <div v-if="pending" class="py-32 flex flex-col items-center justify-center text-gray-400">
           <UIcon name="i-lucide-loader-2" class="w-12 h-12 animate-spin mb-4 text-yellow-500" />
           <p class="font-medium text-lg">Učitavanje detalja narudžbe...</p>
         </div>
 
-        <!-- ERROR STATE -->
         <div v-else-if="error || !data?.order" class="py-20 text-center">
           <UAlert icon="i-lucide-alert-circle" color="red" variant="soft" title="Greška" description="Narudžba nije pronađena ili se dogodila greška na serveru." />
           <UButton to="/admin/dashboard" color="gray" variant="soft" class="mt-4 font-bold" icon="i-lucide-arrow-left">Povratak na nadzornu ploču</UButton>
         </div>
 
-        <!-- MAIN CONTENT -->
         <div v-else class="space-y-8 animate-fade-in">
 
-          <!-- 1. ZAGLAVLJE -->
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <UButton to="/admin/dashboard" color="gray" variant="ghost" icon="i-lucide-arrow-left" class="mb-4 -ml-2 font-bold text-gray-500">
@@ -105,7 +99,6 @@ const ikeaTrackingUrl = computed(() => {
               </p>
             </div>
 
-            <!-- CIJENA (NAGLAŠENA) -->
             <div class="bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-lg border border-gray-800 flex items-center gap-4 shrink-0">
               <div class="bg-gray-800 p-2.5 rounded-xl"><UIcon name="i-lucide-wallet" class="w-6 h-6 text-yellow-400" /></div>
               <div>
@@ -115,10 +108,8 @@ const ikeaTrackingUrl = computed(() => {
             </div>
           </div>
 
-          <!-- 2. KONTROLA STATUSA (ACTION PANEL) -->
           <div class="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
 
-            <!-- Action sekcija (Trenutno vs Sljedeće) -->
             <div class="p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 bg-gray-50/50">
               <div class="text-center md:text-left w-full md:w-auto">
                 <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Trenutni status</p>
@@ -152,20 +143,15 @@ const ikeaTrackingUrl = computed(() => {
               </div>
             </div>
 
-            <!-- Vizualni Stepper (Vremenska crta) -->
             <div class="px-6 py-8 border-t border-gray-100">
               <div class="relative max-w-4xl mx-auto">
-                <!-- Linija u pozadini -->
                 <div class="absolute left-0 top-1/2 -mt-px w-full h-1 bg-gray-100 rounded-full z-0"></div>
-                <!-- Popunjena linija -->
                 <div class="absolute left-0 top-1/2 -mt-px h-1 bg-yellow-400 rounded-full z-0 transition-all duration-500"
                      :style="{ width: `${(currentStatusIndex / (availableStatuses.length - 1)) * 100}%` }">
                 </div>
 
-                <!-- Koraci -->
                 <div class="relative z-10 flex justify-between">
                   <div v-for="(status, index) in availableStatuses" :key="status.value" class="flex flex-col items-center gap-2 group">
-                    <!-- Krug -->
                     <div class="w-10 h-10 rounded-full border-4 border-white flex items-center justify-center transition-all duration-300"
                          :class="[
                            index < currentStatusIndex ? 'bg-gray-800 text-white' : '',
@@ -175,7 +161,6 @@ const ikeaTrackingUrl = computed(() => {
                       <UIcon v-if="index < currentStatusIndex" name="i-lucide-check" class="w-5 h-5" />
                       <UIcon v-else :name="status.icon" class="w-5 h-5" />
                     </div>
-                    <!-- Tekst ispod kruga -->
                     <span class="text-[10px] sm:text-xs font-bold text-center max-w-[70px] leading-tight hidden sm:block"
                           :class="index <= currentStatusIndex ? 'text-gray-900' : 'text-gray-400'">
                       {{ status.label }}
@@ -186,17 +171,15 @@ const ikeaTrackingUrl = computed(() => {
             </div>
           </div>
 
-          <!-- 3. KARTICE S INFORMACIJAMA (GRID) -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            <!-- KUPAC -->
-            <UCard class="shadow-sm border border-gray-200">
+            <UCard class="shadow-sm border border-gray-200 flex flex-col">
               <template #header>
                 <h3 class="font-bold text-gray-900 flex items-center gap-2">
                   <UIcon name="i-lucide-user" class="text-blue-500 w-5 h-5"/> Podaci o kupcu
                 </h3>
               </template>
-              <div class="space-y-4 text-sm">
+              <div class="space-y-4 text-sm flex-grow">
                 <div>
                   <p class="text-xs text-gray-500 font-bold uppercase">Ime i prezime</p>
                   <p class="font-black text-gray-900 text-base">{{ data.order.personalInfo.name }}</p>
@@ -217,8 +200,7 @@ const ikeaTrackingUrl = computed(() => {
               </div>
             </UCard>
 
-            <!-- DOSTAVA -->
-            <UCard class="shadow-sm border border-gray-200">
+            <UCard class="shadow-sm border border-gray-200 flex flex-col">
               <template #header>
                 <div class="flex justify-between items-center">
                   <h3 class="font-bold text-gray-900 flex items-center gap-2">
@@ -229,7 +211,7 @@ const ikeaTrackingUrl = computed(() => {
                   </UBadge>
                 </div>
               </template>
-              <div class="space-y-4 text-sm">
+              <div class="space-y-4 text-sm flex-grow">
                 <div>
                   <p class="text-xs text-gray-500 font-bold uppercase">Ulica i grad</p>
                   <p class="font-black text-gray-900 text-base leading-tight">{{ data.order.delivery.street }}<br/>{{ data.order.delivery.zip }} {{ data.order.delivery.city }}</p>
@@ -242,13 +224,23 @@ const ikeaTrackingUrl = computed(() => {
                     {{ data.order.delivery.option === 'room' ? 'Unos u prostoriju' : 'Istovar na prilazu' }}
                   </p>
 
-                  <div v-if="data.order.delivery.option === 'room'" class="flex items-center gap-2">
+                  <div v-if="data.order.delivery.option === 'room'" class="flex items-center gap-2 mt-2">
                     <UBadge color="white" class="border border-gray-200 text-gray-700">
                       {{ data.order.delivery.objectType === 'zgrada' ? `${data.order.delivery.floor}. kat` : 'Kuća' }}
                     </UBadge>
                     <UBadge v-if="data.order.delivery.objectType === 'zgrada'" :color="data.order.delivery.hasElevator ? 'green' : 'red'" variant="subtle" class="font-bold">
                       {{ data.order.delivery.hasElevator ? 'Ima lift' : 'Nema lifta' }}
                     </UBadge>
+                  </div>
+                </div>
+
+                <div v-if="data.order.transport.disposalRequested && data.order.transport.disposalItemsCount > 0" class="bg-blue-50 border border-blue-200 p-3 rounded-xl text-blue-900 flex items-center justify-between">
+                  <div class="flex items-center gap-2 font-bold">
+                    <UIcon name="i-lucide-trash-2" class="w-5 h-5 text-blue-600" />
+                    Zbrinjavanje robe
+                  </div>
+                  <div class="bg-blue-600 text-white text-xs font-black px-2 py-1 rounded">
+                    {{ data.order.transport.disposalItemsCount }} kom
                   </div>
                 </div>
 
@@ -259,14 +251,13 @@ const ikeaTrackingUrl = computed(() => {
               </div>
             </UCard>
 
-            <!-- IKEA PODACI -->
-            <UCard class="shadow-sm border border-blue-200 bg-blue-50/30">
+            <UCard class="shadow-sm border border-blue-200 bg-blue-50/30 flex flex-col">
               <template #header>
                 <h3 class="font-bold text-blue-900 flex items-center gap-2">
                   <UIcon name="i-lucide-shopping-cart" class="text-blue-600 w-5 h-5"/> IKEA Informacije
                 </h3>
               </template>
-              <div class="space-y-5 text-sm">
+              <div class="space-y-5 text-sm flex-grow">
                 <div>
                   <p class="text-xs text-blue-600/70 font-bold uppercase mb-1">Broj narudžbe</p>
                   <div class="flex items-center gap-2">
@@ -286,7 +277,7 @@ const ikeaTrackingUrl = computed(() => {
                   <UIcon name="i-lucide-clock" class="w-4 h-4 shrink-0" /> Kupac još nije poslao PIN.
                 </div>
 
-                <div class="pt-4 border-t border-blue-100 space-y-2">
+                <div class="pt-4 border-t border-blue-100 space-y-2 mt-auto">
                   <p class="text-xs text-gray-500 truncate" :title="data.order.ikeaDetails.ikeaEmail">E-mail: <strong>{{ data.order.ikeaDetails.ikeaEmail }}</strong></p>
                   <UButton :to="data.order.ikeaDetails.listUrl" target="_blank" color="blue" variant="soft" size="sm" class="w-full justify-center font-bold" trailing-icon="i-lucide-external-link">
                     Otvori IKEA košaricu
@@ -296,9 +287,7 @@ const ikeaTrackingUrl = computed(() => {
             </UCard>
           </div>
 
-          <!-- 4. POPIS TERETA (TRANSPORT) -->
           <div class="shadow-sm rounded-3xl overflow-hidden border border-gray-200 bg-white">
-            <!-- Teret Header -->
             <div class="bg-gray-50 px-6 py-5 flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-200 gap-4">
               <h2 class="text-lg font-black text-gray-900 flex items-center gap-2">
                 <UIcon name="i-lucide-package" class="w-5 h-5 text-gray-500" /> Popis tereta za utovar
@@ -310,11 +299,9 @@ const ikeaTrackingUrl = computed(() => {
               </div>
             </div>
 
-            <!-- Teret Lista -->
             <div class="p-4 sm:p-6 space-y-4">
               <div v-for="group in data.order.transport.items" :key="group.code" class="border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:border-blue-200 transition-colors">
 
-                <!-- Zaglavlje Proizvoda -->
                 <div class="bg-white px-4 py-3 flex items-center gap-4 border-b border-gray-100">
                   <img v-if="group.image" :src="group.image" class="w-14 h-14 rounded-xl border border-gray-100 bg-gray-50 object-contain p-1 shrink-0" />
                   <div v-else class="w-14 h-14 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-300">
@@ -329,7 +316,6 @@ const ikeaTrackingUrl = computed(() => {
                   </div>
                 </div>
 
-                <!-- Kutije unutar proizvoda -->
                 <ul class="divide-y divide-gray-50 bg-gray-50/30">
                   <li v-for="pkg in group.packages" :key="pkg.code" class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div class="text-sm min-w-0">
@@ -363,7 +349,6 @@ const ikeaTrackingUrl = computed(() => {
       </div>
     </main>
 
-    <!-- ZAJEDNIČKI FOOTER -->
     <AppFooter />
   </div>
 </template>

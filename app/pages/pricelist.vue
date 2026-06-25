@@ -23,7 +23,8 @@ const pricing = ref({
   room600: 103.20,
   room1000: 111.20,
   room1400: 207.20,
-  roomOver1400: 250.00
+  roomOver1400: 250.00,
+  disposal: 30.00 // Dodana cijena za zbrinjavanje starog namještaja
 })
 
 const { data: pricingData } = await useFetch('/api/admin/settings/pricing')
@@ -38,7 +39,8 @@ if (pricingData.value?.success && pricingData.value?.data) {
     room600: pd.room600 ?? 103.20,
     room1000: pd.room1000 ?? 111.20,
     room1400: pd.room1400 ?? 207.20,
-    roomOver1400: pd.roomOver1400 ?? 250.00
+    roomOver1400: pd.roomOver1400 ?? 250.00,
+    disposal: pd.disposal ?? 30.00 // Čitamo iz baze
   }
 }
 
@@ -50,6 +52,7 @@ const priceRoom400 = computed(() => Number(pricing.value.room400).toFixed(2).rep
 const priceRoom600 = computed(() => Number(pricing.value.room600).toFixed(2).replace('.', ','))
 const priceRoom1000 = computed(() => Number(pricing.value.room1000).toFixed(2).replace('.', ','))
 const priceRoom1400 = computed(() => Number(pricing.value.room1400).toFixed(2).replace('.', ','))
+const priceDisposal = computed(() => Number(pricing.value.disposal).toFixed(2).replace('.', ','))
 
 </script>
 
@@ -187,22 +190,8 @@ const priceRoom1400 = computed(() => Number(pricing.value.room1400).toFixed(2).r
         <div class="max-w-4xl mx-auto mb-20 animate-fade-in" style="animation-delay: 0.4s;">
           <h2 class="text-2xl font-black text-gray-900 mb-8 text-center">Dodatne usluge</h2>
 
-          <div class="grid md:grid-cols-2 gap-6">
-            <div class="bg-gray-50 rounded-2xl p-6 border border-gray-200 flex flex-col justify-between">
-              <div>
-                <div class="w-10 h-10 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
-                  <UIcon name="i-lucide-wrench" class="w-5 h-5 text-gray-600" />
-                </div>
-                <h4 class="font-bold text-gray-900 mb-2">Stručna montaža namještaja</h4>
-                <p class="text-sm text-gray-600 mb-4">Nemate vremena, strpljenja ili alata? Naš tim će sastaviti Vaš novi namještaj odmah nakon isporuke. Brzo, čisto i bez stresa.</p>
-              </div>
-              <div class="pt-4 border-t border-gray-200/60">
-                <span class="text-xs font-bold text-gray-400 uppercase block mb-0.5">Cijena usluge:</span>
-                <p class="text-xl font-black text-gray-900">25,00 € / sat <span class="text-xs font-normal text-gray-500">(min. 1 sat)</span></p>
-              </div>
-            </div>
-
-            <div class="bg-gray-50 rounded-2xl p-6 border border-gray-200 flex flex-col justify-between">
+          <div class="flex justify-center">
+            <div class="bg-gray-50 rounded-2xl p-6 border border-gray-200 flex flex-col justify-between max-w-md w-full">
               <div>
                 <div class="w-10 h-10 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
                   <UIcon name="i-lucide-trash-2" class="w-5 h-5 text-gray-600" />
@@ -212,7 +201,7 @@ const priceRoom1400 = computed(() => Number(pricing.value.room1400).toFixed(2).r
               </div>
               <div class="pt-4 border-t border-gray-200/60">
                 <span class="text-xs font-bold text-gray-400 uppercase block mb-0.5">Cijena usluge:</span>
-                <p class="text-xl font-black text-gray-900">od 30,00 € / <span class="text-sm font-normal text-gray-500">komad</span></p>
+                <p class="text-xl font-black text-gray-900">od {{ priceDisposal }} € / <span class="text-sm font-normal text-gray-500">komad</span></p>
               </div>
             </div>
           </div>
