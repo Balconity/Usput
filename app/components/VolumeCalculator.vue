@@ -120,6 +120,13 @@ const orderState = reactive({
 const formError = ref('')
 const isSubmitting = ref(false)
 
+// Automatski prekopiraj glavni email u IKEA email ako IKEA email još nije postavljen
+watch(() => orderState.email, (newVal) => {
+  if (currentStep.value === 'contact_info' && !orderState.ikeaEmail) {
+    orderState.ikeaEmail = newVal
+  }
+})
+
 // --- KALKULATOR I REZULTATI ---
 const isCalculating = ref(false)
 const volumeResult = ref<{ status: 'success' | 'error', title: string, message: string } | null>(null)
@@ -194,7 +201,7 @@ const groupedProducts = computed(() => {
 });
 
 // --- ANIMACIJE ---
-const loadingMessages = ['Povezujemo se s IKEA sustavom...', 'Skeniram šifre artikala...', 'Čitam dimenzije paketa...', 'Provjeravam preostali prostor u kombiju...']
+const loadingMessages = ['Povezujemo se s IKEA sustavom...', 'Skeniram šifre artikala u košarici...', 'Čitam dimenzije paketa...', 'Provjeravam preostali prostor u kombiju...']
 const currentLoadingMessage = ref(loadingMessages[0])
 const simulatedProgress = ref(0)
 let loadingInterval: any = null
@@ -230,6 +237,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (loadingInterval) clearInterval(loadingInterval); if (progressInterval) clearInterval(progressInterval); if (reservationInterval) clearInterval(reservationInterval)
 })
+
+function clearUrl() {
+  listUrl.value = ''
+  if (volumeResult.value) resetCheck()
+}
 
 function calculatePrice(volume: number, weight: number, option: string) {
   const p = pricingConfig.value
@@ -340,7 +352,7 @@ async function runVolumeCheck() {
       evaluateFit()
     }
   } catch (error: any) {
-    volumeResult.value = { status: 'error', title: 'Greška', message: error.statusMessage || 'Nismo uspjeli očitati sustav. Provjerite link.' }
+    volumeResult.value = { status: 'error', title: 'Greška', message: error.statusMessage || 'Nismo uspjeli očitati sustav. Provjerite link košarice.' }
   } finally {
     stopLoadingAnimation(); setTimeout(() => { isCalculating.value = false }, 500)
   }
@@ -381,7 +393,7 @@ function proceedToIkeaDetails() {
 }
 function proceedToDelivery() {
   formError.value = ''
-  if (!orderState.ikeaOrderNumber || !orderState.ikeaEmail) { formError.value = 'Molimo ispunite IKEA podatke.'; return }
+  if (!orderState.ikeaOrderNumber || !orderState.ikeaEmail) { formError.value = 'Molimo ispunite podatke o IKEA narudžbi.'; return }
   currentStep.value = 'delivery_details'
 }
 
@@ -448,10 +460,14 @@ async function submitFinalOrder() {
       <UAlert v-if="formError" icon="i-lucide-alert-circle" color="red" variant="soft" :title="formError" class="mb-6 font-medium" />
 
       <div v-if="currentStep === 'calculator'" class="animate-fade-in space-y-6">
+        <div class="text-center mb-4 mt-4">
+          <h3 class="text-xl font-extrabold text-gray-900">Izračunajte cijenu isporuke i rezervirajte datum dostave</h3>
+          <p class="text-sm text-gray-500 mt-1">Unesite link IKEA košarice i provjerite stane li narudžba u vozilo.</p>
+        </div>
 
         <div class="bg-gray-50 border p-4 rounded-2xl space-y-3 transition-colors" :class="isDateInactive ? 'border-red-300 bg-red-50/30' : 'border-gray-200'">
           <UFormField label="Odaberite datum dostave">
-            <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" class="w-full bg-white font-bold text-gray-900" :class="{'ring-2 ring-red-500 border-red-500': isDateInactive}" />
+            <UInput v-model="pickupDate" type="date" :min="minDate" size="lg" class="w-full bg-white font-bold text-gray-900 shadow-sm" :class="{'ring-2 ring-red-500 border-red-500': isDateInactive}" />
           </UFormField>
 
           <div v-if="isDateInactive" class="flex items-center gap-2 text-sm font-bold text-red-600 mt-2">
@@ -460,7 +476,7 @@ async function submitFinalOrder() {
           </div>
 
           <template v-else>
-            <div class="flex items-center justify-between text-xs pt-1 border-t border-gray-200/60 font-medium">
+            <div class="flex items-center justify-between text-xs pt-2 mt-1 border-t border-gray-200/60 font-medium">
               <span class="text-gray-500">Dostupno vozilo za ovaj dan:</span>
               <span class="text-gray-900 font-bold uppercase tracking-wider">{{ activeVehicle?.name }}</span>
             </div>
@@ -474,27 +490,40 @@ async function submitFinalOrder() {
         </div>
 
         <div v-if="!volumeResult && !isCalculating" class="space-y-6 animate-fade-in">
-          <div class="text-center mb-4 mt-2">
-            <h3 class="text-xl font-extrabold text-gray-900">Izračunajte cijenu</h3>
-            <p class="text-sm text-gray-500 mt-1">Unesite popis za kupovinu i provjerite prostor u kombiju.</p>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Poveznica podijeljene IKEA košarice</label>
+            <div class="relative group">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <UIcon name="i-lucide-link" class="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+              </div>
+              <input
+                v-model="listUrl"
+                type="text"
+                placeholder="Zalijepite ovdje link iz IKEA aplikacije..."
+                class="block w-full pl-10 pr-10 py-3.5 sm:text-sm border-gray-300 rounded-xl bg-white border-2 text-gray-900 shadow-sm focus:ring-0 focus:border-blue-500 hover:border-gray-400 transition-colors font-medium placeholder-gray-400"
+              />
+              <div v-if="listUrl" class="absolute inset-y-0 right-0 pr-2 flex items-center">
+                <button @click="clearUrl" type="button" class="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Obriši unos">
+                  <UIcon name="i-lucide-x" class="h-5 w-5" />
+                </button>
+              </div>
+            </div>
           </div>
-
-          <UFormField label="Poveznica podijeljene košarice (IKEA popis)">
-            <UInput v-model="listUrl" type="text" placeholder="Zalijepite ovdje link iz IKEA aplikacije..." size="xl" icon="i-lucide-search" class="w-full" />
-          </UFormField>
 
           <UButton block class="mt-2 font-black shadow-md hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :disabled="!listUrl || !pickupDate || remainingVolumeForDate <= 0 || isDateInactive" @click="runVolumeCheck">
             {{ isDateInactive ? 'Odabrani dan je neradni' : (remainingVolumeForDate <= 0 ? 'Ovaj termin je popunjen' : 'Provjeri gabarite i izračunaj cijenu') }}
           </UButton>
         </div>
 
-        <div v-if="isCalculating" class="mt-6 p-6 border border-yellow-200 rounded-xl flex flex-col items-center text-center bg-white">
+        <div v-if="isCalculating" class="mt-6 p-6 border border-yellow-200 rounded-xl flex flex-col items-center text-center bg-white relative overflow-hidden">
           <div class="absolute inset-0 bg-yellow-50/50 animate-pulse"></div>
           <div class="relative z-10 flex flex-col items-center w-full">
             <UIcon name="i-lucide-box" class="w-10 h-10 text-yellow-600 animate-bounce mb-4" />
             <h4 class="text-lg font-extrabold text-gray-900 mb-2">Samo trenutak...</h4>
             <p class="text-sm text-gray-600 h-5">{{ currentLoadingMessage }}</p>
-            <div class="w-full max-w-[240px] h-2 bg-gray-100 rounded-full mt-6 overflow-hidden"><div class="h-full bg-yellow-400 transition-all duration-300" :style="{ width: `${simulatedProgress}%` }"></div></div>
+            <div class="w-full max-w-[240px] h-2 bg-gray-100 rounded-full mt-6 overflow-hidden">
+              <div class="h-full bg-yellow-400 transition-all duration-300" :style="{ width: `${simulatedProgress}%` }"></div>
+            </div>
           </div>
         </div>
 
@@ -504,7 +533,7 @@ async function submitFinalOrder() {
 
           <div v-if="volumeResult.status === 'error' && suggestedAlternativeDate" class="bg-blue-50 border border-blue-200 rounded-xl p-5 mt-2 animate-fade-in text-center shadow-inner">
             <h4 class="font-bold text-blue-900 mb-2">Pronašli smo slobodan termin za Vas!</h4>
-            <p class="text-sm text-blue-700 mb-4">Vaša roba bez problema stane u naš kombi u sljedećem terminu:</p>
+            <p class="text-sm text-blue-700 mb-4">Svi artikli iz Vaše košarice bez problema stanu u naš kombi u sljedećem terminu:</p>
             <UButton size="lg" color="blue" class="font-black w-full justify-center shadow-md hover:-translate-y-0.5 transition-transform" @click="acceptSuggestedDate">
               Odaberi {{ formattedSuggestedDate }}
             </UButton>
@@ -512,12 +541,12 @@ async function submitFinalOrder() {
 
           <div v-if="volumeResult.status === 'success'" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-              <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Volumen narudžbe</p>
+              <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Volumen košarice</p>
               <p class="text-2xl font-black text-gray-900">{{ totalVolume }} m³</p>
               <p class="text-[10px] text-gray-500 mt-0.5">Slobodno još {{ remainingVolumeForDate }} m³</p>
             </div>
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-              <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Težina narudžbe</p>
+              <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Težina košarice</p>
               <p class="text-2xl font-black text-gray-900">{{ totalWeight }} kg</p>
               <p class="text-[10px] text-gray-500 mt-0.5">Maks. nosivost: {{ activeVehicle.maxWeight }} kg</p>
             </div>
@@ -529,7 +558,7 @@ async function submitFinalOrder() {
           </div>
 
           <div v-if="volumeResult.status === 'success' && groupedProducts.length > 0">
-            <h4 class="text-base font-extrabold text-gray-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-shopping-bag" class="w-5 h-5 text-yellow-500" /> Vaši IKEA paketi</h4>
+            <h4 class="text-base font-extrabold text-gray-900 mb-3 flex items-center gap-2"><UIcon name="i-lucide-shopping-bag" class="w-5 h-5 text-yellow-500" /> Detalji IKEA košarice</h4>
             <div class="space-y-4 max-h-[250px] overflow-y-auto pr-1 pb-2">
               <div v-for="group in groupedProducts" :key="group.code" class="border border-gray-200 rounded-2xl overflow-hidden shadow-md bg-white">
                 <div class="bg-gray-900 p-4 flex items-center gap-3 border-b border-gray-800 text-white">
@@ -550,7 +579,7 @@ async function submitFinalOrder() {
 
           <div v-if="volumeResult.status === 'success'" class="space-y-6 pt-4 border-t border-gray-200">
 
-            <UFormField label="1. Odaberite način istovara (Obavezno)">
+            <UFormField label="1. Odaberite način isporuke (Obavezno)">
               <div class="flex flex-col sm:flex-row gap-4 w-full mt-2">
                 <label class="flex-1 relative flex cursor-pointer rounded-2xl border p-4 hover:bg-gray-50 transition-colors" :class="deliveryOption === 'curbside' ? 'bg-yellow-50 border-yellow-500 ring-1 ring-yellow-500' : 'border-gray-200 bg-white'">
                   <input type="radio" v-model="deliveryOption" value="curbside" class="sr-only" @change="recalculatePrice" />
@@ -642,20 +671,28 @@ async function submitFinalOrder() {
         <UFormField label="Vaše ime i prezime" required><UInput v-model="orderState.name" size="lg" icon="i-lucide-user" class="w-full" /></UFormField>
         <UFormField label="E-mail adresa" required><UInput v-model="orderState.email" type="email" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
         <UFormField label="Broj mobitela" required><UInput v-model="orderState.phone" type="tel" size="lg" icon="i-lucide-phone" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton><UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToIkeaDetails">Sljedeći korak &rarr;</UButton></div>
+        <div class="flex gap-4 pt-4 border-t border-gray-100">
+          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton>
+          <UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToIkeaDetails">Sljedeći korak &rarr;</UButton>
+        </div>
       </div>
 
       <div v-if="currentStep === 'ikea_details'" class="animate-fade-in space-y-6">
         <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Podaci iz IKEA-e</h3></div>
         <UFormField label="Broj narudžbe" required><UInput v-model="orderState.ikeaOrderNumber" size="lg" icon="i-lucide-hash" class="w-full" /></UFormField>
-        <UFormField label="E-mail s kojim je naručeno" required><UInput v-model="orderState.ikeaEmail" type="email" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton><UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToDelivery">Zadnji korak &rarr;</UButton></div>
+        <UFormField label="E-mail s kojim je naručeno" required>
+          <UInput v-model="orderState.ikeaEmail" type="email" size="lg" icon="i-lucide-mail" class="w-full" />
+          <template #help><span class="text-xs text-gray-400 mt-1 block">Na ovu adresu će Vam IKEA poslati obavijesti o pošiljci.</span></template>
+        </UFormField>
+        <div class="flex gap-4 pt-4 border-t border-gray-100">
+          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton>
+          <UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToDelivery">Zadnji korak &rarr;</UButton>
+        </div>
       </div>
 
       <div v-if="currentStep === 'delivery_details'" class="animate-fade-in space-y-6">
         <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Adresa isporuke</h3></div>
-        <input v-model="orderState.website" type="text" class="hidden" />
-        <UFormField label="Ulica i kućni broj" required><UInput v-model="orderState.street" size="lg" icon="i-lucide-map-pin" class="w-full" /></UFormField>
+        <input v-model="orderState.website" type="text" class="hidden" /> <UFormField label="Ulica i kućni broj" required><UInput v-model="orderState.street" size="lg" icon="i-lucide-map-pin" class="w-full" /></UFormField>
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="Grad" required><UInput v-model="orderState.city" size="lg" class="w-full" /></UFormField>
           <UFormField label="Poštanski broj" required><UInput v-model="orderState.zip" size="lg" class="w-full" /></UFormField>
@@ -667,10 +704,17 @@ async function submitFinalOrder() {
               <UInput v-model="orderState.floor" :disabled="orderState.objectType === 'kuca'" :placeholder="orderState.objectType === 'kuca' ? 'Nije primjenjivo' : 'Koji kat?'" class="w-1/2" size="lg" />
             </div>
           </UFormField>
-          <div v-if="orderState.objectType === 'zgrada'" class="mt-4 pt-4 border-t border-gray-200"><UCheckbox v-model="orderState.hasElevator" color="yellow" class="font-bold text-gray-900"><template #label>Zgrada ima <strong>prostran lift</strong></template></UCheckbox></div>
+          <div v-if="orderState.objectType === 'zgrada'" class="mt-4 pt-4 border-t border-gray-200">
+            <UCheckbox v-model="orderState.hasElevator" color="yellow" class="font-bold text-gray-900">
+              <template #label>Zgrada ima <strong>prostran lift</strong></template>
+            </UCheckbox>
+          </div>
         </div>
         <UFormField label="Napomena za vozača (Opcionalno)"><UTextarea v-model="orderState.notes" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100"><UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton><UButton class="flex-1 justify-center shadow-xl font-black hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :loading="isSubmitting" @click="submitFinalOrder">Pošalji narudžbu</UButton></div>
+        <div class="flex gap-4 pt-4 border-t border-gray-100">
+          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton>
+          <UButton class="flex-1 justify-center shadow-xl font-black hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :loading="isSubmitting" @click="submitFinalOrder">Pošalji narudžbu</UButton>
+        </div>
       </div>
 
       <div v-if="currentStep === 'success'" class="animate-fade-in text-center py-10">

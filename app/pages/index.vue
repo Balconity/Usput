@@ -23,6 +23,9 @@ useHead({
   ]
 })
 
+// --- OBAVIJEST O TESTIRANJU (BETA STATUS) ---
+const showBetaBanner = ref(true)
+
 // --- DINAMIČKO DOHVAĆANJE CIJENA (Novi, fiksni model) ---
 const pricing = ref({
   standard: 3.99,
@@ -60,6 +63,24 @@ const priceRoom = computed(() => Number(pricing.value.room400).toFixed(2).replac
 
 <template>
   <div class="min-h-screen flex flex-col font-sans bg-gray-50 text-neutral-900 selection:bg-yellow-400 selection:text-black scroll-smooth">
+
+    <div v-if="showBetaBanner" class="bg-gray-900 text-white relative z-50 overflow-hidden shadow-md">
+      <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9zdmc+')] opacity-30"></div>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 relative flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-yellow-400 text-gray-900 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shrink-0 animate-pulse">
+            BETA TEST
+          </div>
+          <p class="text-xs sm:text-sm font-medium leading-tight">
+            <span class="font-bold text-yellow-400">Aplikacija je u fazi testiranja!</span> Sustav je trenutno u probnom radu. Ako uočite grešku ili imate pitanje, slobodno nam javite.
+          </p>
+        </div>
+        <button @click="showBetaBanner = false" class="text-gray-400 hover:text-white p-1 rounded-md transition-colors focus:outline-none shrink-0" aria-label="Zatvori obavijest">
+          <UIcon name="i-lucide-x" class="w-4 h-4 block" />
+        </button>
+      </div>
+    </div>
+
     <AppHeader/>
 
     <main class="flex-grow">
@@ -74,39 +95,14 @@ const priceRoom = computed(() => Number(pricing.value.room400).toFixed(2).replac
           <div class="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center lg:items-start">
 
             <div class="lg:col-span-6 pt-4 lg:sticky lg:top-32 animate-fade-in-up">
-
-              <div class="flex flex-wrap gap-3 mb-8">
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 font-bold text-xs border border-green-200/60 shadow-sm uppercase tracking-wider backdrop-blur-sm">
-                  <UIcon name="i-lucide-trending-down" class="w-4 h-4" />
-                  <span>Dostava namještaja 20% povoljnija od IKEA-e</span>
-                </div>
-
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-50 text-yellow-800 font-bold text-xs border border-yellow-200/60 shadow-sm backdrop-blur-sm">
-                  <UIcon name="i-lucide-map-pin" class="w-4 h-4" />
-                  <span>Zagreb &rarr; Varaždin (i okolica)</span>
-                </div>
-              </div>
-
               <h1 class="text-5xl lg:text-7xl font-extrabold tracking-tight leading-tight text-gray-900 mb-6 drop-shadow-sm">
                 Pametnija dostava.<br/>
-                Ne isplati se ako nije <span class="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">usput.</span>
+                Ne isplati se ako nije <span class="text-warning">usput</span>.
               </h1>
-
               <p class="text-lg text-gray-600 leading-relaxed max-w-lg mb-10 font-medium">
-                Dostavljamo vaše <strong class="text-[#0057AD] font-bold">IKEA</strong> pakete iz Zagreba direktno na vaša vrata, brže i povoljnije od službene dostave namještaja.
-                Zalijepite svoj popis za kupovinu i saznajte cijenu.
+                Dostavljamo <strong class="text-[#0057AD] font-bold">IKEA</strong> pakete direktno na vaša vrata, brže i povoljnije od službene dostave namještaja.
+                Zalijepite link svoje IKEA košarice u formu i saznajte detalje dostave.
               </p>
-
-              <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 text-sm font-bold text-gray-500 bg-white/50 inline-flex p-4 rounded-2xl border border-gray-100 shadow-sm backdrop-blur-sm">
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-lucide-check-circle-2" class="w-5 h-5 text-yellow-500" />
-                  Trenutni izračun
-                </div>
-                <div class="flex items-center gap-2">
-                  <UIcon name="i-lucide-check-circle-2" class="w-5 h-5 text-yellow-500" />
-                  Preuzimanje iz Paketomata
-                </div>
-              </div>
             </div>
 
             <div class="lg:col-span-6 relative z-10 animate-fade-in-up" style="animation-delay: 0.1s;">
@@ -120,51 +116,116 @@ const priceRoom = computed(() => Number(pricing.value.room400).toFixed(2).replac
         </UContainer>
       </section>
 
-      <section id="how-it-works" class="py-24 bg-white relative z-20">
-        <UContainer>
-          <div class="text-center max-w-3xl mx-auto mb-20 animate-on-scroll">
-            <h2 class="text-3xl lg:text-5xl font-black mb-6 text-gray-900 tracking-tight">Kako funkcionira?</h2>
-            <p class="text-gray-500 text-lg font-medium">Cijeli proces je prilagođen vama, bez dugih čekanja i kompliciranih dogovora. Od kupnje do vaših vrata u 4 jednostavna koraka.</p>
+      <section id="how-it-works" class="py-24 lg:py-32 bg-white relative z-20 overflow-hidden">
+        <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgc3Ryb2tlPSIjZTU1MjU3NyIgc3Ryb2tlLW9wYWNpdHk9IjAuMDUiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCI+PHBhdGggZD0iTTM2IDM0djI2SDM0VjM0aC0ydjI2SDMwVjM0aC0ydjI2SDI2VjM0aC0ydjI2SDIyVjM0aC0ydjI2SDE4VjM0aC0ydjI2SDE0VjM0aC0ydjI2SDEwVjM0SDh2MjZINlYzNEg0djI2SDJWMzRIMHYtMmg2MFYzMnoiLz48pGF0aCBkPSJNMzYgMjhWMGgydjI4aDJWMGgydjI4aDJWMGgydjI4aDJWMGgydjI4aDJWMGgydjI4aDJWMGgydjI4SDI4em0yIDB2MjhoLTJWMjhoMnpNOCAyOHYtMmgyOHYyaC0yeiIvPjwvZz48L3N2Zz4=')] opacity-50 z-0"></div>
+
+        <UContainer class="relative z-10">
+          <div class="text-center max-w-3xl mx-auto mb-20 lg:mb-28 animate-fade-in-up">
+            <span class="inline-block py-1.5 px-3 rounded-full bg-yellow-100 text-yellow-800 font-bold text-xs uppercase tracking-widest mb-4">Proces dostave</span>
+            <h2 class="text-3xl lg:text-5xl font-black mb-6 text-gray-900 tracking-tight">Pametniji put do namještaja</h2>
+            <p class="text-gray-500 text-lg lg:text-xl font-medium">Nema kompliciranih popisa ni ručnog prepisivanja artikala. Naš sustav se direktno spaja na vašu IKEA košaricu u 3 jednostavna koraka.</p>
           </div>
 
-          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
-            <div class="hidden lg:block absolute top-12 left-[12%] right-[12%] h-0.5 bg-gradient-to-r from-gray-100 via-yellow-400 to-gray-100 z-0"></div>
+          <div class="space-y-24 lg:space-y-32">
 
-            <div class="relative z-10 flex flex-col items-center text-center group">
-              <div class="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 mb-8 group-hover:-translate-y-3 group-hover:shadow-[0_8px_30px_rgb(250,204,21,0.2)] group-hover:border-yellow-200 transition-all duration-300">
-                <UIcon name="i-lucide-calculator" class="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
+            <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+              <div class="lg:w-1/2 order-2 lg:order-1 relative group perspective">
+                <div class="absolute inset-0 bg-gradient-to-br from-blue-100 to-transparent rounded-3xl transform -rotate-3 scale-105 transition-transform group-hover:rotate-0 duration-500"></div>
+                <div class="relative bg-white rounded-3xl p-8 border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.05)]">
+                  <div class="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100">
+                    <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white"><UIcon name="i-lucide-shopping-bag" class="w-4 h-4"/></div>
+                    <span class="font-bold text-gray-900">IKEA Webshop</span>
+                  </div>
+                  <div class="space-y-3 mb-6">
+                    <div class="h-16 bg-gray-50 rounded-xl border border-gray-100 flex items-center px-4 gap-4">
+                      <div class="w-10 h-10 bg-gray-200 rounded-lg"></div>
+                      <div class="space-y-2 flex-1"><div class="h-2 w-1/3 bg-gray-300 rounded"></div><div class="h-2 w-1/4 bg-gray-200 rounded"></div></div>
+                    </div>
+                    <div class="h-16 bg-gray-50 rounded-xl border border-gray-100 flex items-center px-4 gap-4">
+                      <div class="w-10 h-10 bg-gray-200 rounded-lg"></div>
+                      <div class="space-y-2 flex-1"><div class="h-2 w-1/2 bg-gray-300 rounded"></div><div class="h-2 w-1/5 bg-gray-200 rounded"></div></div>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center bg-blue-50 text-blue-800 p-3 rounded-xl border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors">
+                    <span class="text-sm font-bold">Završi i podijeli košaricu</span>
+                    <UIcon name="i-lucide-share" class="w-5 h-5"/>
+                  </div>
+                </div>
               </div>
-              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-24 border-4 border-white shadow-sm transition-transform group-hover:scale-110">1</div>
-              <h3 class="text-xl font-black text-gray-900 mb-3">Provjerite cijenu</h3>
-              <p class="text-sm text-gray-500 font-medium leading-relaxed px-4">Kopirajte link svog IKEA popisa u naš alat. Odmah ćete saznati cijenu i imamo li slobodan termin.</p>
+              <div class="lg:w-1/2 order-1 lg:order-2 space-y-6">
+                <div class="w-16 h-16 bg-gray-900 text-yellow-400 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg transform -rotate-6">1</div>
+                <h3 class="text-3xl font-black text-gray-900">Složite svoju košaricu</h3>
+                <p class="text-lg text-gray-600 font-medium leading-relaxed">
+                  Otvorite službenu IKEA aplikaciju ili web stranicu i dodajte sve željene proizvode u košaricu. Kada ste gotovi, nemojte ići na plaćanje! Samo kliknite na ikonu za <strong class="text-blue-600">dijeljenje košarice</strong> i kopirajte generirani link.
+                </p>
+              </div>
             </div>
 
-            <div class="relative z-10 flex flex-col items-center text-center group">
-              <div class="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 mb-8 group-hover:-translate-y-3 group-hover:shadow-[0_8px_30px_rgb(250,204,21,0.2)] group-hover:border-yellow-200 transition-all duration-300">
-                <UIcon name="i-lucide-shopping-cart" class="w-10 h-10 text-gray-400 group-hover:text-yellow-500 transition-colors" />
+            <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+              <div class="lg:w-1/2 space-y-6">
+                <div class="w-16 h-16 bg-yellow-400 text-gray-900 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg transform rotate-6">2</div>
+                <h3 class="text-3xl font-black text-gray-900">Izračun i narudžba</h3>
+                <p class="text-lg text-gray-600 font-medium leading-relaxed">
+                  Zalijepite kopirani link u formu na vrhu naše stranice. Sustav odmah računa točan volumen i provjerava dostupnost vozila. Od tog trenutka <strong class="text-gray-900">imate rezerviran termin od 30 minuta</strong>. U tom vremenu završite plaćanje u IKEA-i, vratite se k nama s brojem narudžbe i potvrdite dostavu.
+                </p>
+                <div class="inline-flex items-center gap-2 text-sm font-bold text-yellow-700 bg-yellow-50 px-4 py-2 rounded-lg border border-yellow-200">
+                  <UIcon name="i-lucide-timer" class="w-5 h-5" /> 30 minuta osiguran prostor u kombiju
+                </div>
               </div>
-              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-24 border-4 border-white shadow-sm transition-transform group-hover:scale-110">2</div>
-              <h3 class="text-xl font-black text-gray-900 mb-3">Naručite u IKEA-i</h3>
-              <p class="text-sm text-gray-500 font-medium leading-relaxed px-4">Obavite kupnju na IKEA webshopu i pod način preuzimanja obavezno odaberite <strong>IKEA Paketomat</strong>.</p>
+              <div class="lg:w-1/2 relative group perspective">
+                <div class="absolute inset-0 bg-gradient-to-bl from-yellow-100 to-transparent rounded-3xl transform rotate-3 scale-105 transition-transform group-hover:rotate-0 duration-500"></div>
+                <div class="relative bg-white rounded-3xl p-8 border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.05)]">
+                  <div class="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+                    <div class="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-gray-900"><UIcon name="i-lucide-link" class="w-4 h-4"/></div>
+                    <span class="font-bold text-gray-900">Usput Dostava</span>
+                  </div>
+                  <div class="mb-4">
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Link vaše IKEA košarice</label>
+                    <div class="bg-white border-2 border-yellow-400 rounded-xl p-3 flex items-center justify-between shadow-sm">
+                      <span class="text-sm text-gray-400 truncate w-3/4">https://www.ikea.com/hr/hr/favorites...</span>
+                      <div class="bg-gray-100 p-1.5 rounded-lg"><UIcon name="i-lucide-clipboard-paste" class="w-4 h-4 text-gray-500"/></div>
+                    </div>
+                  </div>
+                  <div class="bg-gray-900 text-white rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <div class="text-xs text-gray-400 font-medium mb-0.5">Izračunata cijena isporuke</div>
+                      <div class="text-xl font-black text-yellow-400">43,99 €</div>
+                    </div>
+                    <UButton color="yellow" variant="solid" size="sm" class="text-black font-bold">Rezerviraj termin</UButton>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="relative z-10 flex flex-col items-center text-center group">
-              <div class="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 mb-8 group-hover:-translate-y-3 group-hover:shadow-[0_8px_30px_rgb(250,204,21,0.2)] group-hover:border-yellow-200 transition-all duration-300">
-                <UIcon name="i-lucide-clipboard-check" class="w-10 h-10 text-gray-400 group-hover:text-green-500 transition-colors" />
+            <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+              <div class="lg:w-1/2 order-2 lg:order-1 relative group perspective">
+                <div class="absolute inset-0 bg-gradient-to-br from-green-100 to-transparent rounded-3xl transform -rotate-2 scale-105 transition-transform group-hover:rotate-0 duration-500"></div>
+                <div class="relative bg-white rounded-3xl p-8 border border-gray-100 shadow-[0_20px_50px_rgba(0,0,0,0.05)] text-center">
+                  <div class="w-20 h-20 bg-green-50 rounded-full mx-auto flex items-center justify-center mb-6 border-4 border-white shadow-md">
+                    <UIcon name="i-lucide-mail-check" class="w-10 h-10 text-green-500"/>
+                  </div>
+                  <h4 class="text-xl font-black text-gray-900 mb-2">Sve stiže na mail</h4>
+                  <p class="text-sm text-gray-500 font-medium mb-6 px-4">Potvrda narudžbe i račun stižu u vaš inbox. Kada IKEA pripremi robu, očekujemo vaš SMS.</p>
+
+                  <div class="flex flex-col gap-2 mt-2">
+                    <div class="inline-flex items-center gap-2 bg-gray-50 border border-gray-200 text-gray-600 font-bold text-xs px-3 py-2 rounded-lg justify-center">
+                      <UIcon name="i-lucide-message-square" class="w-4 h-4"/> 1. IKEA vam šalje SMS s PIN-om
+                    </div>
+                    <div class="inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 font-bold text-xs px-3 py-2 rounded-lg justify-center shadow-sm">
+                      <UIcon name="i-lucide-forward" class="w-4 h-4"/> 2. Proslijedite PIN i oznaku nama
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-24 border-4 border-white shadow-sm transition-transform group-hover:scale-110">3</div>
-              <h3 class="text-xl font-black text-gray-900 mb-3">Rezervirajte dostavu</h3>
-              <p class="text-sm text-gray-500 font-medium leading-relaxed px-4">Vratite se ovdje, upišite svoj broj narudžbe iz IKEA-e i adresu na koju vozimo vaše pakete.</p>
+              <div class="lg:w-1/2 order-1 lg:order-2 space-y-6">
+                <div class="w-16 h-16 bg-gray-900 text-green-400 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg transform -rotate-3">3</div>
+                <h3 class="text-3xl font-black text-gray-900">Potvrda i preuzimanje</h3>
+                <p class="text-lg text-gray-600 font-medium leading-relaxed">
+                  Odmah nakon narudžbe, na e-mail dobivate službenu potvrdu. Kada vaši proizvodi budu spremni za prikup, IKEA će vam poslati SMS. Tada nam samo trebate <strong class="text-gray-900">proslijediti PIN i oznaku paketomata</strong>, a mi odlazimo po vaše pakete i dovozimo ih na vaša vrata!
+                </p>
+              </div>
             </div>
 
-            <div class="relative z-10 flex flex-col items-center text-center group">
-              <div class="w-24 h-24 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-3xl flex items-center justify-center shadow-lg shadow-yellow-500/20 border border-yellow-400 mb-8 group-hover:-translate-y-3 transition-all duration-300">
-                <UIcon name="i-lucide-smartphone" class="w-10 h-10 text-gray-900" />
-              </div>
-              <div class="w-8 h-8 rounded-full bg-gray-900 text-white font-bold flex items-center justify-center text-sm absolute top-20 -mr-24 border-4 border-white shadow-sm transition-transform group-hover:scale-110">4</div>
-              <h3 class="text-xl font-black text-gray-900 mb-3">Pošaljite nam PIN</h3>
-              <p class="text-sm text-gray-500 font-medium leading-relaxed px-4">Kada vam IKEA pošalje SMS s PIN kodom, proslijedite nam ga. Mi preuzimamo robu i dolazimo k vama!</p>
-            </div>
           </div>
         </UContainer>
       </section>
@@ -254,35 +315,128 @@ const priceRoom = computed(() => Number(pricing.value.room400).toFixed(2).replac
 
       <section id="services" class="py-24 bg-white">
         <UContainer>
-          <div class="text-center max-w-2xl mx-auto mb-16">
-            <h2 class="text-3xl lg:text-5xl font-black mb-6 text-gray-900 tracking-tight">Mala logistika, velika prednost</h2>
-            <p class="text-gray-500 text-lg font-medium">Fokusirani smo isključivo na vaš paket, bez usputnih stanica po cijeloj Hrvatskoj.</p>
+          <div class="text-center max-w-2xl mx-auto mb-16 animate-fade-in-up">
+            <span class="inline-block py-1.5 px-3 rounded-full bg-blue-100 text-blue-800 font-bold text-xs uppercase tracking-widest mb-4">Zašto odabrati nas?</span>
+            <h2 class="text-3xl lg:text-5xl font-black mb-6 text-gray-900 tracking-tight">Lokalni pristup, velika prednost</h2>
+            <p class="text-gray-500 text-lg font-medium">Usluga krojena isključivo za Varaždin i okolicu. Vaš namještaj ne putuje danima po sortirnim centrima – vozimo direktno iz robne kuće do Vaših vrata.</p>
           </div>
 
           <div class="grid md:grid-cols-3 gap-8">
-            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 transition-colors group">
-              <div class="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UIcon name="i-lucide-shield-check" class="w-6 h-6 text-gray-700" />
+
+            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 hover:shadow-lg transition-all duration-300 group">
+              <div class="w-14 h-14 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <UIcon name="i-lucide-route" class="w-7 h-7 text-gray-800" />
               </div>
-              <h3 class="text-xl font-bold mb-3 text-gray-900">Treća strana pri preuzimanju</h3>
-              <p class="text-gray-500 font-medium leading-relaxed">Prilikom kupnje na webshopu navedite ime našeg dostavljača koji će u vaše ime preuzeti robu, kako biste bili bezbrižni i zakonski pokriveni.</p>
+              <h3 class="text-xl font-bold mb-3 text-gray-900">Direktna ruta Zagreb – Varaždin</h3>
+              <p class="text-gray-500 font-medium leading-relaxed">
+                Zaboravite na velike kurirske službe kod kojih se Vaš namještaj vozi cijelim sjeverom Hrvatske prije isporuke. Naša ruta je fiksna, a isporuka brza, predvidljiva i točna.
+              </p>
             </div>
 
-            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 transition-colors group">
-              <div class="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UIcon name="i-lucide-box" class="w-6 h-6 text-gray-700" />
+            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 hover:shadow-lg transition-all duration-300 group">
+              <div class="w-14 h-14 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:border-yellow-400 transition-transform">
+                <UIcon name="i-lucide-box" class="w-7 h-7 text-gray-700" />
               </div>
               <h3 class="text-xl font-bold mb-3 text-gray-900">Preuzimanje iz Paketomata</h3>
-              <p class="text-gray-500 font-medium leading-relaxed">Izbjegnite gužve. Usmjerite narudžbe u IKEA paketomat, proslijedite nam PIN kod čim ga dobijete i mi robu preuzimamo za vas.</p>
+              <p class="text-gray-500 font-medium leading-relaxed">
+                Izbjegnite čekanje u redovima i gužve na šalterima. Usmjerite svoju narudžbu u vanjski IKEA Paketomat, proslijedite nam PIN, a mi ćemo beskontaktno preuzeti Vašu robu.
+              </p>
             </div>
 
-            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 transition-colors group">
-              <div class="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UIcon name="i-lucide-route" class="w-6 h-6 text-gray-700" />
+            <div class="bg-gray-50 rounded-3xl p-8 border border-gray-100 hover:border-yellow-400 hover:shadow-lg transition-all duration-300 group">
+              <div class="w-14 h-14 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:border-yellow-400 transition-transform">
+                <UIcon name="i-lucide-shield-check" class="w-7 h-7 text-gray-700" />
               </div>
-              <h3 class="text-xl font-bold mb-3 text-gray-900">Direktno bez prekrcavanja</h3>
-              <p class="text-gray-500 font-medium leading-relaxed">Vaša roba ide iz robne kuće direktno u naše vozilo i na vašu adresu, bez stajanja, gubitka ili pretumbavanja u sortirnim centrima.</p>
+              <h3 class="text-xl font-bold mb-3 text-gray-900">Bez prekrcavanja i oštećenja</h3>
+              <p class="text-gray-500 font-medium leading-relaxed">
+                Vaši paketi izlaze iz IKEA-e, pažljivo se slažu u naše vozilo i vade tek pred Vašom kućom. Nema tjednog skladištenja i pretumbavanja, čime drastično smanjujemo rizik od oštećenja.
+              </p>
             </div>
+
+          </div>
+        </UContainer>
+      </section>
+
+      <section id="about-us" class="py-24 bg-gray-50 border-t border-gray-100 relative overflow-hidden">
+        <div class="absolute -right-64 -top-64 w-[500px] h-[500px] bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <UContainer class="relative z-10">
+          <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+
+            <div class="order-2 lg:order-1 space-y-6 animate-fade-in-up">
+              <h2 class="text-3xl lg:text-5xl font-black text-gray-900 tracking-tight">Tko stoji iza Usput dostave?</h2>
+
+              <div class="space-y-4 text-lg text-gray-600 font-medium leading-relaxed">
+                <p>
+                  Ideja za "Usput" nastala je iz želje da našim sugrađanima riješimo konkretan problem. Svjedočili smo kako ljudi gube dragocjeno vrijeme i živce na organizaciju prijevoza iz Zagreba, posuđivanje kombija, nošenje teških kutija i čekanje logističkih službi koje su često bile preskupe i spore.
+                </p>
+                <p>
+                  Zato smo odlučili zasukati rukave i ponuditi bolju alternativu. Naš je cilj unaprijediti standard dostave u našem kraju i ljudima maksimalno olakšati opremanje doma. Kod nas nema call centara i prebacivanja paketa po skladištima – kada rezervirate termin, znate da posao odrađujemo mi osobno, odgovorno i s puno pažnje prema vašim stvarima. Vaše je samo da odaberete, a mi preuzimamo sav teški posao.
+                </p>
+              </div>
+
+              <div class="pt-8 border-t border-gray-200/60 flex flex-col sm:flex-row gap-6">
+                <div class="flex items-center gap-4">
+                  <div class="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center border border-gray-200">
+                    <UIcon name="i-lucide-map-pin" class="w-5 h-5 text-yellow-500"/>
+                  </div>
+                  <div class="text-sm">
+                    <p class="font-bold text-gray-900">100% Lokalno</p>
+                    <p class="text-gray-500">Iz Varaždina za Varaždin i okolicu</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <div class="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center border border-gray-200">
+                    <UIcon name="i-lucide-users" class="w-5 h-5 text-blue-500"/>
+                  </div>
+                  <div class="text-sm">
+                    <p class="font-bold text-gray-900">Osobni pristup</p>
+                    <p class="text-gray-500">Odgovaramo za svaki paket</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="order-1 lg:order-2 relative group perspective">
+              <div class="absolute inset-0 bg-gradient-to-tr from-yellow-300 to-yellow-100 rounded-3xl transform rotate-3 scale-105 transition-transform duration-500 group-hover:rotate-1 group-hover:scale-100"></div>
+
+              <div class="relative bg-white p-2 rounded-3xl shadow-xl">
+
+                <div class="aspect-[4/3] bg-gray-900 rounded-2xl overflow-hidden relative flex flex-col items-center justify-center p-8 text-center border border-gray-800">
+                  <div class="absolute top-0 right-0 w-64 h-64 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
+                  <div class="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                  <div class="relative z-10 mb-6 transition-transform duration-500 group-hover:-translate-y-2">
+                    <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center border border-gray-700 shadow-lg">
+                      <UIcon name="i-lucide-truck" class="w-10 h-10 text-yellow-400" />
+                    </div>
+                    <div class="absolute -bottom-2 -right-2 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center border-2 border-gray-900 shadow-sm">
+                      <UIcon name="i-lucide-map-pin" class="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+
+                  <h3 class="relative z-10 text-2xl font-black text-white mb-2 tracking-tight">Usput Dostava</h3>
+                  <p class="relative z-10 text-gray-400 font-medium text-sm leading-relaxed max-w-xs mx-auto">
+                    Vaš namještaj je u sigurnim rukama.<br/>
+                    Od preuzimanja u Zagrebu do Vašeg dnevnog boravka u Varaždinu.
+                  </p>
+
+                  <div class="relative z-10 mt-8 pt-6 border-t border-gray-800 w-full flex justify-center items-center gap-2">
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Osnivači:</span>
+                    <span class="text-xs text-yellow-400 font-black uppercase tracking-wider">Kruno & Tomi</span>
+                  </div>
+                </div>
+
+                <div class="absolute -bottom-6 -left-6 bg-yellow-400 text-gray-900 p-4 rounded-2xl shadow-lg border-4 border-white transform -rotate-3 transition-transform duration-500 group-hover:rotate-0">
+                  <div class="flex items-center gap-2">
+                    <UIcon name="i-lucide-zap" class="w-5 h-5 fill-gray-900" />
+                    <span class="font-black text-sm">Brzo i pažljivo</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
           </div>
         </UContainer>
       </section>
