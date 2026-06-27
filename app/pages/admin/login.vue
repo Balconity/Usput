@@ -63,9 +63,6 @@ async function handleLogin() {
 
         <!-- Branding i Naslov -->
         <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 mb-4">
-            <UIcon name="i-lucide-lock" class="w-8 h-8 text-yellow-500" />
-          </div>
           <h1 class="text-4xl font-black text-gray-900 tracking-tight mb-2">
             Usput<span class="text-yellow-500">.</span>
           </h1>
