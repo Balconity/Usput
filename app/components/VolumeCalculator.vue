@@ -47,14 +47,17 @@ if (fleet.value.vehicles.length === 0) {
 
 const { data: occupancyData, refresh: refreshOccupancy } = await useFetch('/api/public/occupancy')
 
-// --- STANJA APLIKACIJE ---
-type Step = 'calculator' | 'reserved' | 'contact_info' | 'ikea_details' | 'delivery_details' | 'success'
+// --- STANJA APLIKACIJE (Smanjen broj koraka) ---
+type Step = 'calculator' | 'reserved' | 'contact_info' | 'delivery_details' | 'success'
 const currentStep = ref<Step>('calculator')
 
 const progressPercentage = computed(() => {
   switch (currentStep.value) {
-    case 'calculator': return 15; case 'reserved': return 35; case 'contact_info': return 55;
-    case 'ikea_details': return 75; case 'delivery_details': return 90; case 'success': return 100;
+    case 'calculator': return 25;
+    case 'reserved': return 50;
+    case 'contact_info': return 75;
+    case 'delivery_details': return 90;
+    case 'success': return 100;
     default: return 0
   }
 })
@@ -114,18 +117,11 @@ const wantsDisposal = ref(false)
 const disposalItemsCount = ref(1)
 
 const orderState = reactive({
-  name: '', phone: '', email: '', ikeaOrderNumber: '', ikeaEmail: '',
+  name: '', phone: '', email: '', ikeaOrderNumber: '',
   street: '', city: '', zip: '42000', objectType: 'zgrada', floor: '', hasElevator: false, notes: '', website: ''
 })
 const formError = ref('')
 const isSubmitting = ref(false)
-
-// Automatski prekopiraj glavni email u IKEA email ako IKEA email još nije postavljen
-watch(() => orderState.email, (newVal) => {
-  if (currentStep.value === 'contact_info' && !orderState.ikeaEmail) {
-    orderState.ikeaEmail = newVal
-  }
-})
 
 // --- KALKULATOR I REZULTATI ---
 const isCalculating = ref(false)
@@ -386,14 +382,14 @@ function cancelReservation(autoExpired = false) {
 }
 
 function proceedToContact() { currentStep.value = 'contact_info'; emit('status-changed', true) }
-function proceedToIkeaDetails() {
-  formError.value = ''
-  if (!orderState.name || !orderState.phone || !orderState.email) { formError.value = 'Molimo ispunite sve osobne podatke.'; return }
-  currentStep.value = 'ikea_details'
-}
+
+// Funkcija sada provjerava sve kontaktne podatke i ide direktno na odabir adrese
 function proceedToDelivery() {
   formError.value = ''
-  if (!orderState.ikeaOrderNumber || !orderState.ikeaEmail) { formError.value = 'Molimo ispunite podatke o IKEA narudžbi.'; return }
+  if (!orderState.name || !orderState.email || !orderState.phone || !orderState.ikeaOrderNumber) {
+    formError.value = 'Molimo ispunite sve osobne podatke i broj IKEA narudžbe.';
+    return
+  }
   currentStep.value = 'delivery_details'
 }
 
@@ -408,7 +404,8 @@ async function submitFinalOrder() {
       method: 'POST',
       body: {
         personalInfo: { name: orderState.name, email: orderState.email, phone: orderState.phone },
-        ikeaDetails: { orderNumber: orderState.ikeaOrderNumber, ikeaEmail: orderState.ikeaEmail, listUrl: listUrl.value },
+        // Backend i dalje očekuje ikeaDetails.ikeaEmail, pa mu prosljeđujemo glavni email
+        ikeaDetails: { orderNumber: orderState.ikeaOrderNumber, ikeaEmail: orderState.email, listUrl: listUrl.value },
         delivery: { date: pickupDate.value, option: deliveryOption.value, street: orderState.street, city: orderState.city, zip: orderState.zip, objectType: orderState.objectType, floor: orderState.floor, hasElevator: orderState.hasElevator, notes: orderState.notes },
         transport: {
           price: deliveryPrice.value,
@@ -447,7 +444,7 @@ async function submitFinalOrder() {
           </div>
 
           <span class="text-xs font-bold bg-gray-800 text-yellow-400 px-3 py-1 rounded-full hidden sm:inline-block">
-            Korak {{ currentStep === 'calculator' ? '1/5' : currentStep === 'reserved' ? '2/5' : currentStep === 'contact_info' ? '3/5' : currentStep === 'ikea_details' ? '4/5' : currentStep === 'delivery_details' ? '5/5' : 'Završeno' }}
+            Korak {{ currentStep === 'calculator' ? '1/4' : currentStep === 'reserved' ? '2/4' : currentStep === 'contact_info' ? '3/4' : currentStep === 'delivery_details' ? '4/4' : 'Završeno' }}
           </span>
         </div>
       </div>
@@ -667,32 +664,37 @@ async function submitFinalOrder() {
       </div>
 
       <div v-if="currentStep === 'contact_info'" class="animate-fade-in space-y-6">
-        <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Osobni podaci</h3></div>
-        <UFormField label="Vaše ime i prezime" required><UInput v-model="orderState.name" size="lg" icon="i-lucide-user" class="w-full" /></UFormField>
-        <UFormField label="E-mail adresa" required><UInput v-model="orderState.email" type="email" size="lg" icon="i-lucide-mail" class="w-full" /></UFormField>
-        <UFormField label="Broj mobitela" required><UInput v-model="orderState.phone" type="tel" size="lg" icon="i-lucide-phone" class="w-full" /></UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100">
-          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton>
-          <UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToIkeaDetails">Sljedeći korak &rarr;</UButton>
-        </div>
-      </div>
+        <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Podaci o narudžbi</h3></div>
 
-      <div v-if="currentStep === 'ikea_details'" class="animate-fade-in space-y-6">
-        <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Podaci iz IKEA-e</h3></div>
-        <UFormField label="Broj narudžbe" required><UInput v-model="orderState.ikeaOrderNumber" size="lg" icon="i-lucide-hash" class="w-full" /></UFormField>
-        <UFormField label="E-mail s kojim je naručeno" required>
-          <UInput v-model="orderState.ikeaEmail" type="email" size="lg" icon="i-lucide-mail" class="w-full" />
-          <template #help><span class="text-xs text-gray-400 mt-1 block">Na ovu adresu će Vam IKEA poslati obavijesti o pošiljci.</span></template>
+        <UFormField label="Vaše ime i prezime" required>
+          <UInput v-model="orderState.name" size="lg" icon="i-lucide-user" class="w-full" />
         </UFormField>
-        <div class="flex gap-4 pt-4 border-t border-gray-100">
-          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton>
+
+        <UFormField label="E-mail adresa" required>
+          <UInput v-model="orderState.email" type="email" size="lg" icon="i-lucide-mail" class="w-full" />
+          <template #help><span class="text-xs text-gray-400 mt-1 block">Na ovu e-mail adresu šaljemo potvrdu, a koristimo ju i kao poveznicu s Vašom IKEA narudžbom.</span></template>
+        </UFormField>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <UFormField label="Broj mobitela" required>
+            <UInput v-model="orderState.phone" type="tel" size="lg" icon="i-lucide-phone" class="w-full" />
+          </UFormField>
+
+          <UFormField label="Broj IKEA narudžbe" required>
+            <UInput v-model="orderState.ikeaOrderNumber" size="lg" icon="i-lucide-hash" class="w-full" />
+          </UFormField>
+        </div>
+
+        <div class="flex gap-4 pt-4 border-t border-gray-100 mt-6">
+          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'reserved'">Nazad</UButton>
           <UButton class="flex-1 justify-center font-bold shadow-md hover:-translate-y-0.5 transition-transform" color="black" size="xl" @click="proceedToDelivery">Zadnji korak &rarr;</UButton>
         </div>
       </div>
 
       <div v-if="currentStep === 'delivery_details'" class="animate-fade-in space-y-6">
         <div class="mb-6 border-b pb-4"><h3 class="text-xl font-extrabold text-gray-900">Adresa isporuke</h3></div>
-        <input v-model="orderState.website" type="text" class="hidden" /> <UFormField label="Ulica i kućni broj" required><UInput v-model="orderState.street" size="lg" icon="i-lucide-map-pin" class="w-full" /></UFormField>
+        <input v-model="orderState.website" type="text" class="hidden" />
+        <UFormField label="Ulica i kućni broj" required><UInput v-model="orderState.street" size="lg" icon="i-lucide-map-pin" class="w-full" /></UFormField>
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="Grad" required><UInput v-model="orderState.city" size="lg" class="w-full" /></UFormField>
           <UFormField label="Poštanski broj" required><UInput v-model="orderState.zip" size="lg" class="w-full" /></UFormField>
@@ -712,7 +714,7 @@ async function submitFinalOrder() {
         </div>
         <UFormField label="Napomena za vozača (Opcionalno)"><UTextarea v-model="orderState.notes" class="w-full" /></UFormField>
         <div class="flex gap-4 pt-4 border-t border-gray-100">
-          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'ikea_details'">Nazad</UButton>
+          <UButton variant="soft" color="gray" size="xl" @click="currentStep = 'contact_info'">Nazad</UButton>
           <UButton class="flex-1 justify-center shadow-xl font-black hover:-translate-y-0.5 transition-transform" style="background-color: #facc15; color: #000;" size="xl" :loading="isSubmitting" @click="submitFinalOrder">Pošalji narudžbu</UButton>
         </div>
       </div>
